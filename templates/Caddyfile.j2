@@ -2,9 +2,27 @@
     admin off
     auto_https off
     order sablier before reverse_proxy
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 10MB
+            roll_keep 5
+            roll_keep_for 720h
+        }
+        format json
+    }
 }
 
 :80 {
+    log {
+        output file /var/log/caddy/error.log {
+            roll_size 10MB
+            roll_keep 5
+            roll_keep_for 720h
+        }
+        format json
+        level ERROR
+    }
+
     respond / "QEMU scale-to-zero lab. Access VMs at /{{ container_prefix }}_1 through /{{ container_prefix }}_{{ n }}" 200
 
     @containers path {% for i in range(1, n + 1) %}/{{ container_prefix }}_{{ i }}{% if not loop.last %} {% endif %}{% endfor %}
@@ -12,6 +30,12 @@
 
     {% for i in range(1, n + 1) %}
     route /{{ container_prefix }}_{{ i }}/* {
+        @ip_used {
+            not path /{{ container_prefix }}_{{ i }}/*
+            remote_ip {remote_host}
+        }
+        respond @ip_used "IP {remote_host} is already using another container" 403
+
         uri strip_prefix /{{ container_prefix }}_{{ i }}
         sablier http://sablier:10000 {
             names {{ container_prefix }}_{{ i }}

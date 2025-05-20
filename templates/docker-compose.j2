@@ -3,7 +3,7 @@ version: '3.8'
 services:
   caddy:
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile
       args:
         CADDY_VERSION: "2.8.4"
@@ -11,6 +11,7 @@ services:
       - "8080:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_logs:/var/log/caddy
     depends_on:
       - sablier
     healthcheck:
@@ -58,7 +59,7 @@ services:
     expose:
       - "8006"
     volumes:
-      - /var/lib/docker/qemu_volumes/{{ container_prefix }}_{{ i }}:/storage
+      - {% if volume_prefix == '.' %}.{% else %}{{ volume_prefix }}{% endif %}/{{ container_prefix }}_{{ i }}:/storage:rw
     restart: unless-stopped
     labels:
       - sablier.enable=true
@@ -78,4 +79,5 @@ networks:
 
 volumes:
   caddy_data:
-  caddy_config: 
+  caddy_config:
+  caddy_logs: 
