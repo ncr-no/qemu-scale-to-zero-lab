@@ -1,0 +1,141 @@
+version: '3.8'
+
+services:
+  caddy:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        CADDY_VERSION: "2.8.4"
+    ports:
+      - "8080:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_logs:/var/log/caddy
+    depends_on:
+      - sablier
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qemu-network
+
+  sablier:
+    image: sablierapp/sablier:1.9.0
+    command:
+      - start
+      - --provider.name=docker
+      - --strategy.dynamic.default-theme=hacker-terminal
+      - --strategy.dynamic.refresh-frequency=5s
+      - --strategy.dynamic.display-name=Kali
+      - --strategy.dynamic.show-details=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "10000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qemu-network
+
+
+  kali_1:
+    image: qemux/qemu
+    container_name: kali_1
+    environment:
+      BOOT_MODE: "legacy"
+      BOOT: "kali"
+      RAM_SIZE: "2G"
+      CPU_CORES: "2"
+    devices:
+      - /dev/kvm
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    expose:
+      - "8006"
+    volumes:
+      - ./kali_1:/storage:rw
+    restart: unless-stopped
+    labels:
+      - sablier.enable=true
+      - sablier.group=qemu-lab
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qemu-network
+
+  kali_2:
+    image: qemux/qemu
+    container_name: kali_2
+    environment:
+      BOOT_MODE: "legacy"
+      BOOT: "kali"
+      RAM_SIZE: "2G"
+      CPU_CORES: "2"
+    devices:
+      - /dev/kvm
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    expose:
+      - "8006"
+    volumes:
+      - ./kali_2:/storage:rw
+    restart: unless-stopped
+    labels:
+      - sablier.enable=true
+      - sablier.group=qemu-lab
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qemu-network
+
+  kali_3:
+    image: qemux/qemu
+    container_name: kali_3
+    environment:
+      BOOT_MODE: "legacy"
+      BOOT: "kali"
+      RAM_SIZE: "2G"
+      CPU_CORES: "2"
+    devices:
+      - /dev/kvm
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    expose:
+      - "8006"
+    volumes:
+      - ./kali_3:/storage:rw
+    restart: unless-stopped
+    labels:
+      - sablier.enable=true
+      - sablier.group=qemu-lab
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qemu-network
+
+
+networks:
+  qemu-network:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
+  caddy_logs: 
