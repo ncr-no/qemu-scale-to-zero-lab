@@ -63,6 +63,6 @@ docker-compose up -d
 ## 🚀 Usage
 
 ```bash
-pip install jinja2
+pip install -r requirements.txt
 python generate.py
 docker compose -f output/docker-compose.yml up -d
