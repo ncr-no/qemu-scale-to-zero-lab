@@ -2,7 +2,7 @@
 
 A scalable QEMU container deployment with scale-to-zero functionality using Sablier.
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 ├── render.py              # Template rendering script
@@ -15,7 +15,7 @@ A scalable QEMU container deployment with scale-to-zero functionality using Sabl
     └── Caddyfile
 ```
 
-## Usage
+## 🚀 Usage
 
 1. Install dependencies:
 ```bash
@@ -37,7 +37,7 @@ cd output
 docker-compose up -d
 ```
 
-## Configuration Options
+## ⚙️ Configuration Options
 
 - `-n, --num-containers`: Number of QEMU containers (default: 6)
 - `--boot-mode`: QEMU boot mode (legacy/uefi, default: legacy)
@@ -53,16 +53,3 @@ docker-compose up -d
 - 🔁 Auto-scaling via sablier session lifecycle
 - 🔐 Secure routing with Caddy reverse proxy
 - 📦 Easy deployment with a single command
-
-## 📁 Structure
-
-- `render.py` — Python script to generate config files
-- `templates/` — Jinja2 templates for Caddy and Docker
-- `output/` — Auto-generated deployable configs
-
-## 🚀 Usage
-
-```bash
-pip install -r requirements.txt
-python generate.py
-docker compose -f output/docker-compose.yml up -d
