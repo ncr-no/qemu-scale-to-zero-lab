@@ -1,0 +1,35 @@
+{
+    admin off
+    auto_https off
+    order sablier before reverse_proxy
+}
+
+:80 {
+    respond / "QEMU scale-to-zero lab. Access VMs at /{{ container_prefix }}_1 through /{{ container_prefix }}_{{ n }}" 200
+
+    @containers path {% for i in range(1, n + 1) %}/{{ container_prefix }}_{{ i }}{% if not loop.last %} {% endif %}{% endfor %}
+    redir @containers {http.request.uri.path}/ permanent
+
+    {% for i in range(1, n + 1) %}
+    route /{{ container_prefix }}_{{ i }}/* {
+        uri strip_prefix /{{ container_prefix }}_{{ i }}
+        sablier http://sablier:10000 {
+            names {{ container_prefix }}_{{ i }}
+            session_duration 10m
+            dynamic {
+                display_name "{{ container_prefix | title }} Container {{ i }}"
+                show_details true
+                theme hacker-terminal
+                refresh_frequency 5s
+            }
+        }
+        reverse_proxy {{ container_prefix }}_{{ i }}:8006 {
+            header_up Host {{ container_prefix }}_{{ i }}:8006
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Host {host}
+        }
+    }
+    {% endfor %}
+} 

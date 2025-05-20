@@ -1,0 +1,27 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Understand the scaling logic:
+- N is variable; all blocks for QEMU services and routes must be rendered via loops.
+
+For docker-compose.j2:
+- Define base services: caddy, sablier
+- Loop to generate qemu_i services (with environment, volumes, labels, etc.)
+- Set shared network
+
+For Caddyfile.j2:
+- Add sablier-before-reverse_proxy directive
+- Add default homepage response and redirect rules
+- Loop to create route /qemu_i/* with sablier and reverse proxy blocks
+
+Ensure correctness:
+- Jinja2 control structures ({% for ... %}, etc.)
+- No hardcoded numbers except where required
+- Template readable, organized
+
+Output Format:
+- Clearly separate both templates with comments or filenames
+- No extra narrative or markdown formatting — raw Jinja2 output
+
