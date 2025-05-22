@@ -1,4 +1,4 @@
-ARG CADDY_VERSION=2.8.4
+ARG CADDY_VERSION=2.9.1
 FROM repository.ncr.ntnu.no/caddy:${CADDY_VERSION}-builder AS builder
 
 RUN xcaddy build \
