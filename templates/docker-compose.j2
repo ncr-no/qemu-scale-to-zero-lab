@@ -28,9 +28,8 @@ services:
       - start
       - --provider.name=docker
       - --strategy.dynamic.default-theme=hacker-terminal
-      - --strategy.dynamic.refresh-frequency=5s
-      - --strategy.dynamic.display-name={{ container_prefix | title }}
-      - --strategy.dynamic.show-details=true
+      - --strategy.dynamic.default-refresh-frequency=5s
+      - --strategy.dynamic.show-details-by-default=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: always
