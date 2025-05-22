@@ -13,4 +13,4 @@ COPY . .
 RUN uv sync
 
 # Run application
-CMD ["fastapi", "run", "container_lock/main.py"]
+CMD ["/app/.venv/bin/fastapi", "run", "container_lock/main.py"]
