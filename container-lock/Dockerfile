@@ -10,5 +10,7 @@ COPY uv.lock .
 # Copy application code
 COPY . .
 
+RUN uv sync
+
 # Run application
 CMD ["fastapi", "run", "container_lock/main.py"]
