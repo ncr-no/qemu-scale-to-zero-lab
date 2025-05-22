@@ -37,28 +37,92 @@
         path /check-lock
     }
     handle_path /check-lock {
-        reverse_proxy http://container-lock:8000/check?ip={http.request.header.X-Real-IP}
+        reverse_proxy container-lock:8000/check {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /acquire {
+        reverse_proxy container-lock:8000/acquire {
+            header_up X-Real-IP {remote}
+        }
+    }
+    handle_path /release {
+        reverse_proxy container-lock:8000/release {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    # Catch-all: send unknown paths to /lobby (except /active, /check-lock, /)
+    @not_handled {
+        not path /active*
+        not path /check-lock*
+        not path /
+        {% for i in range(1, n + 1) %}
+        not path /{{ container_prefix }}_{{ i }}*
+        {% endfor %}
+    }
+    handle @not_handled {
+        redir /lobby 302
     }
 
     {% for i in range(1, n + 1) %}
     route /{{ container_prefix }}_{{ i }}/* {
-        uri strip_prefix /{{ container_prefix }}_{{ i }}
-        sablier http://sablier:10000 {
-            names {{ container_prefix }}_{{ i }}
-            session_duration 10m
-            dynamic {
-                display_name "{{ container_prefix | title }} Container {{ i }}"
-                show_details true
-                theme hacker-terminal
-                refresh_frequency 5s
+        # First check if this container is already locked by the current user
+        @has_lock {
+            path /{{ container_prefix }}_{{ i }}/*
+            reverse_proxy container-lock:8000/check {
+                header_up X-Real-IP {remote}
+                @locked status 200
+                @locked header_regexp container_id "{{ container_prefix }}_{{ i }}"
             }
         }
-        reverse_proxy {{ container_prefix }}_{{ i }}:8006 {
-            header_up Host {{ container_prefix }}_{{ i }}:8006
-            header_up X-Real-IP {remote}
-            header_up X-Forwarded-For {remote}
-            header_up X-Forwarded-Proto {scheme}
-            header_up X-Forwarded-Host {host}
+
+        # If already locked by this user, serve the container
+        handle @has_lock {
+            uri strip_prefix /{{ container_prefix }}_{{ i }}
+            sablier http://sablier:10000 {
+                names {{ container_prefix }}_{{ i }}
+                session_duration 10m
+                dynamic {
+                    display_name "{{ container_prefix | title }} Container {{ i }}"
+                    show_details true
+                    theme hacker-terminal
+                    refresh_frequency 5s
+                }
+                # When session ends, release the lock
+                on_session_end "curl -X POST 'http://container-lock:8000/release?ip={remote}'"
+            }
+            reverse_proxy {{ container_prefix }}_{{ i }}:8006 {
+                header_up Host {{ container_prefix }}_{{ i }}:8006
+                header_up X-Real-IP {remote}
+                header_up X-Forwarded-For {remote}
+                header_up X-Forwarded-Proto {scheme}
+                header_up X-Forwarded-Host {host}
+            }
+        }
+
+        # For users without a lock, try to acquire one
+        handle {
+            reverse_proxy container-lock:8000/acquire {
+                header_up X-Real-IP {remote}
+                
+                # Pass the container ID as query parameters
+                method POST
+                rewrite * "?ip={remote}&container_id={{ container_prefix }}_{{ i }}"
+                
+                # If lock was acquired successfully, redirect back to the same URL
+                @acquired status 200
+                handle_response @acquired {
+                    redir {http.request.uri} 302
+                }
+                
+                # If lock acquisition failed, redirect to lobby
+                @failed status 400
+                handle_response @failed {
+                    redir /lobby 302
+                }
+            }
         }
     }
     {% endfor %}
