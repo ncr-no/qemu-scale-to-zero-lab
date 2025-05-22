@@ -1,0 +1,23 @@
+[project]
+name = "container-lock"
+version = "0.1.0"
+description = "Container Lock Service for QEMU Scale-to-Zero Lab"
+authors = [{ name = "Your Name", email = "you@example.com" }]
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.68.0",
+    "uvicorn>=0.15.0",
+    "redis>=4.5.5",
+    "pydantic>=2.0",
+    "docker",
+    "pydantic-settings>=2.9.1",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.4.0",
+]
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
