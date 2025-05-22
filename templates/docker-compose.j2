@@ -14,6 +14,8 @@ services:
       - caddy_logs:/var/log/caddy
     depends_on:
       - sablier
+      - container-lock
+      - redis
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost"]
       interval: 10s
@@ -38,6 +40,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    depends_on:
+      - container-lock
+      - redis
     networks:
       - qemu-network
 
@@ -71,6 +76,27 @@ services:
     networks:
       - qemu-network
 {% endfor %}
+
+  redis:
+    image: repository.ncr.ntnu.no/redis:7.2-alpine
+    restart: always
+    networks:
+      - qemu-network
+
+  container-lock:
+    build:
+      context: ../container-lock
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: "redis://redis:6379/0"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - qemu-network
 
 networks:
   qemu-network:
