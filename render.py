@@ -20,22 +20,22 @@ def validate_boot_mode(mode):
     return mode
 
 def validate_container_count(count):
-    if count < 1:
+    if int(count) < 1:
         raise argparse.ArgumentTypeError("Number of containers must be at least 1")
-    if count > 100:
+    if int(count) > 100:
         raise argparse.ArgumentTypeError("Number of containers cannot exceed 100")
-    return count
+    return int(count)
 
 def validate_volume_path(path):
     # Convert to absolute path if relative
     if path == '.':
         return path
     abs_path = os.path.abspath(path)
+    
+    # Just check if the path exists, don't try to create it
     if not os.path.exists(abs_path):
-        try:
-            os.makedirs(abs_path, exist_ok=True)
-        except Exception as e:
-            raise argparse.ArgumentTypeError(f"Invalid volume path: {str(e)}")
+        raise argparse.ArgumentTypeError(f"Path does not exist: {abs_path}")
+    
     return abs_path
 
 def show_config_summary(args):
@@ -128,4 +128,4 @@ def main():
     render_templates(args)
 
 if __name__ == '__main__':
-    main() 
+    main()
