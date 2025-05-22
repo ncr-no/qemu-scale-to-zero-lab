@@ -6,7 +6,7 @@ services:
       context: ..
       dockerfile: Dockerfile
       args:
-        CADDY_VERSION: "2.8.4"
+        CADDY_VERSION: "2.9.1"
     ports:
       - "8080:80"
     volumes:
@@ -14,6 +14,8 @@ services:
       - caddy_logs:/var/log/caddy
     depends_on:
       - sablier
+      - container-lock
+      - redis
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost"]
       interval: 10s
@@ -23,14 +25,13 @@ services:
       - qemu-network
 
   sablier:
-    image: sablierapp/sablier:1.9.0
+    image: repository.ncr.ntnu.no/sablierapp/sablier:1.9.0
     command:
       - start
       - --provider.name=docker
       - --strategy.dynamic.default-theme=hacker-terminal
-      - --strategy.dynamic.refresh-frequency=5s
-      - --strategy.dynamic.display-name=Kali
-      - --strategy.dynamic.show-details=true
+      - --strategy.dynamic.default-refresh-frequency=5s
+      - --strategy.dynamic.show-details-by-default=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: always
@@ -39,12 +40,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    depends_on:
+      - container-lock
+      - redis
     networks:
       - qemu-network
 
 
   kali_1:
-    image: qemux/qemu
+    image: repository.ncr.ntnu.no/qemux/qemu
     container_name: kali_1
     environment:
       BOOT_MODE: "legacy"
@@ -73,7 +77,7 @@ services:
       - qemu-network
 
   kali_2:
-    image: qemux/qemu
+    image: repository.ncr.ntnu.no/qemux/qemu
     container_name: kali_2
     environment:
       BOOT_MODE: "legacy"
@@ -101,35 +105,27 @@ services:
     networks:
       - qemu-network
 
-  kali_3:
-    image: qemux/qemu
-    container_name: kali_3
-    environment:
-      BOOT_MODE: "legacy"
-      BOOT: "kali"
-      RAM_SIZE: "2G"
-      CPU_CORES: "2"
-    devices:
-      - /dev/kvm
-      - /dev/net/tun
-    cap_add:
-      - NET_ADMIN
-    expose:
-      - "8006"
-    volumes:
-      - ./kali_3:/storage:rw
-    restart: unless-stopped
-    labels:
-      - sablier.enable=true
-      - sablier.group=qemu-lab
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8006"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+
+  redis:
+    image: redis:7.2-alpine
+    restart: always
     networks:
       - qemu-network
 
+  container-lock:
+    build:
+      context: ../container-lock
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: "redis://redis:6379/0"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - qemu-network
 
 networks:
   qemu-network:

@@ -23,19 +23,25 @@
         level ERROR
     }
 
-    respond / "QEMU scale-to-zero lab. Access VMs at /kali_1 through /kali_3" 200
+    respond / "QEMU scale-to-zero lab. Access VMs at /kali_1 through /kali_2" 200
 
-    @containers path /kali_1 /kali_2 /kali_3
+    @containers path /kali_1 /kali_2
     redir @containers {http.request.uri.path}/ permanent
+
+    route /lobby/* {
+        respond "You are in the lobby. Please wait for a container to become available." 200
+    }
+
+    @check_lock {
+        header X-Real-IP *
+        path /check-lock
+    }
+    handle_path /check-lock {
+        reverse_proxy http://container-lock:8000/check?ip={http.request.header.X-Real-IP}
+    }
 
     
     route /kali_1/* {
-        @ip_used {
-            not path /kali_1/*
-            remote_ip {remote_host}
-        }
-        respond @ip_used "IP {remote_host} is already using another container" 403
-
         uri strip_prefix /kali_1
         sablier http://sablier:10000 {
             names kali_1
@@ -49,20 +55,14 @@
         }
         reverse_proxy kali_1:8006 {
             header_up Host kali_1:8006
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
             header_up X-Forwarded-Proto {scheme}
             header_up X-Forwarded-Host {host}
         }
     }
     
     route /kali_2/* {
-        @ip_used {
-            not path /kali_2/*
-            remote_ip {remote_host}
-        }
-        respond @ip_used "IP {remote_host} is already using another container" 403
-
         uri strip_prefix /kali_2
         sablier http://sablier:10000 {
             names kali_2
@@ -76,38 +76,11 @@
         }
         reverse_proxy kali_2:8006 {
             header_up Host kali_2:8006
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
             header_up X-Forwarded-Proto {scheme}
             header_up X-Forwarded-Host {host}
         }
     }
     
-    route /kali_3/* {
-        @ip_used {
-            not path /kali_3/*
-            remote_ip {remote_host}
-        }
-        respond @ip_used "IP {remote_host} is already using another container" 403
-
-        uri strip_prefix /kali_3
-        sablier http://sablier:10000 {
-            names kali_3
-            session_duration 10m
-            dynamic {
-                display_name "Kali Container 3"
-                show_details true
-                theme hacker-terminal
-                refresh_frequency 5s
-            }
-        }
-        reverse_proxy kali_3:8006 {
-            header_up Host kali_3:8006
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-            header_up X-Forwarded-Host {host}
-        }
-    }
-    
-} 
+}
