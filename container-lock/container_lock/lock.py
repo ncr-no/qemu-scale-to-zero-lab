@@ -95,3 +95,68 @@ def get_active_containers(redis_client=None) -> list[str]:
     except Exception as e:
         logger.error(f"Redis error during active containers lookup: {str(e)}")
         raise HTTPException(status_code=500, detail="Lock service unavailable")
+
+def list_all_containers_with_locks(redis_client=None):
+    """
+    Returns a list of all managed containers with lock and status info.
+    Each dict contains: id, name, status, locked_by_ip (or None)
+    """
+    redis_client = redis_client or get_redis_client()
+    try:
+        client = docker.from_env()
+        containers = client.containers.list(all=True)
+        result = []
+        for container in containers:
+            labels = container.labels
+            if labels.get("sablier.group") != config.GROUP_LABEL:
+                continue
+            container_id = container.id
+            name = container.name
+            status = container.status
+            # Find which IP (if any) has this container locked
+            locked_by_ip = None
+            for key in redis_client.scan_iter("lock:*"):
+                ip = key.decode().split(":", 1)[1] if isinstance(key, bytes) else key.split(":", 1)[1]
+                locked_id = redis_client.get(key)
+                if locked_id:
+                    locked_id = locked_id.decode() if isinstance(locked_id, bytes) else locked_id
+                    if str(locked_id) == str(container_id):
+                        locked_by_ip = ip
+                        break
+            result.append({
+                "id": container_id,
+                "name": name,
+                "status": status,
+                "locked_by_ip": locked_by_ip
+            })
+        return result
+    except Exception as e:
+        logger.error(f"Error listing containers with locks: {str(e)}")
+        raise HTTPException(status_code=500, detail="Unable to list containers")
+
+def list_all_containers() -> list[dict]:
+    """
+    Returns a list of all managed containers with name and status info.
+    Each dict contains: id, name, status
+    """
+    try:
+        client = docker.from_env()
+        containers = client.containers.list(all=True)
+        result = []
+        for container in containers:
+            # labels = container.labels
+            # if labels.get("sablier.group") != config.GROUP_LABEL:
+            #     continue # Skip containers not managed by this service
+            container_id = container.id
+            name = container.name
+            status = container.status
+            result.append({
+                "id": container_id,
+                "name": name,
+                "status": status
+            })
+        return result
+    except Exception as e:
+        logger.error(f"Error listing containers: {str(e)}")
+        raise HTTPException(status_code=500, detail="Unable to list containers")
+        

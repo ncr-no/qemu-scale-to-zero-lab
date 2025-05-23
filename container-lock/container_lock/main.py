@@ -1,10 +1,17 @@
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
-from container_lock.lock import acquire_lock, release_lock, get_locked_container, get_active_containers
+from fastapi.responses import JSONResponse, HTMLResponse
+from container_lock.lock import acquire_lock, list_all_containers, release_lock, get_locked_container, get_active_containers, list_all_containers_with_locks
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 import logging
+import os
 
 app = FastAPI(title="Container Lock Service", version="0.1.0")
 logger = logging.getLogger(__name__)
+
+# Setup Jinja2 templates and static files
+templates = Jinja2Templates(directory=os.path.abspath(os.path.join(os.path.dirname(__file__), './templates')))
+app.mount("/static", StaticFiles(directory=os.path.abspath(os.path.join(os.path.dirname(__file__), './static'))), name="static")
 
 @app.post("/acquire")
 async def acquire_container_lock(ip: str, container_id: str):
@@ -57,13 +64,42 @@ async def get_active():
     logger.info(f"[ACTIVE] Active containers: {containers}")
     return JSONResponse(status_code=200, content={"active_containers": containers})
 
-@app.get("/")
-async def root():
+@app.get("/health")
+async def health():
     """
     Root endpoint for health check
     """
     logger.info("[ROOT] Health check")
     return JSONResponse(status_code=200, content={"status": "Container Lock Service Active"})
+
+@app.get("/", response_class=HTMLResponse)
+async def ui(request: Request):
+    """
+    Serve the container sessions UI
+    """
+    try:
+        url = request.url
+        containers = list_all_containers_with_locks()
+        active_containers = [c for c in containers if c['status'] == 'running' and c['locked_by_ip']]
+        available_containers = [c for c in containers if not c['locked_by_ip'] or c['status'] != 'running']
+        available_containers = list_all_containers()
+        return templates.TemplateResponse(
+            "container_sessions.html",
+            {
+                "request": request,
+                "active_containers": active_containers,
+                "available_containers": available_containers,
+                "url": url
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error rendering UI: {e}")
+        # Render an error page if fetching container data fails
+        return templates.TemplateResponse(
+            "error.html",
+            {"request": request},
+            status_code=500 # Internal Server Error
+        )
 
 if __name__ == "__main__":
     import uvicorn
