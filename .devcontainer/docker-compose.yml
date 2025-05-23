@@ -1,0 +1,14 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: sleep infinity
+    volumes:
+      - ..:/workspace:cached
+      - /var/run/docker.sock.raw:/var/run/docker.sock
+    environment:
+      REDIS_URL: "redis://localhost:6379/0"
+  redis:
+    image: redis:7-alpine
+    network_mode: service:app

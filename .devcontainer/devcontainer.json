@@ -1,0 +1,36 @@
+{
+  "name": "Python & Redis DevContainer",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "postCreateCommand": "cd /workspace/container-lock && uv sync",
+  "forwardPorts": [8000, 6379],
+  "workspaceFolder": "/workspace",
+
+    // Configure tool-specific properties.
+    "customizations": {
+      // Configure properties specific to VS Code.
+      "vscode": {
+        // Set *default* container specific settings.json values on container create.
+        "settings": {
+          "python.defaultInterpreterPath": "/workspace/container-lock/.venv/bin",
+          "python.formatting.ruffPath": "/workspace/container-lock/.venv/bin/ruff",
+          "python.linting.ruffEnabled": true,
+          "python.linting.enabled": true,
+          "python.testing.pytestPath": "/workspace/container-lock/.venv/bin/pytest"
+        },
+
+        // Add the IDs of extensions you want installed when the container is created.
+        "extensions": [
+          "ms-python.python",
+          "mintlify.document",
+          "codezombiech.gitignore",
+          "gitlab.gitlab-workflow",
+          "eamodio.gitlens",
+          "cweijan.vscode-postgresql-client2",
+          "ms-ossdata.vscode-postgresql",
+          "github.copilot",
+          "charliermarsh.ruff"
+        ]
+      }
+    },
+} 
