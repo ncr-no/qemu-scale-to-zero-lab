@@ -31,3 +31,11 @@ class MockRedis:
 
     def smembers(self, key):
         return {m.encode() if isinstance(m, str) else m for m in self._sets.get(key, set())}
+
+    def scan_iter(self, pattern):
+        import re
+        # Convert redis pattern to regex
+        regex = re.compile('^' + pattern.replace('*', '.*') + '$')
+        for key in list(self._data.keys()):
+            if regex.match(key):
+                yield key.encode() if isinstance(key, str) else key
