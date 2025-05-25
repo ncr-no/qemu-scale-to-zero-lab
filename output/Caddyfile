@@ -23,21 +23,95 @@
         level ERROR
     }
 
-    respond / "QEMU scale-to-zero lab. Access VMs at /kali_1 through /kali_2" 200
+    respond / "QEMU scale-to-zero lab. Access VMs at /kali_1 through /kali_3" 200
 
-    @containers path /kali_1 /kali_2
+    @containers path /kali_1 /kali_2 /kali_3
     redir @containers {http.request.uri.path}/ permanent
 
     route /lobby/* {
         respond "You are in the lobby. Please wait for a container to become available." 200
     }
 
-    @check_lock {
-        header X-Real-IP *
-        path /check-lock
-    }
     handle_path /check-lock {
-        reverse_proxy http://container-lock:8000/check?ip={http.request.header.X-Real-IP}
+        reverse_proxy container-lock:8000/check {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /acquire {
+        reverse_proxy container-lock:8000/acquire {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /release {
+        reverse_proxy container-lock:8000/release {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /cleanup {
+        reverse_proxy container-lock:8000/cleanup {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /container/*/status {
+        reverse_proxy container-lock:8000{uri} {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /containers/status {
+        reverse_proxy container-lock:8000/containers/status {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /my-active-container {
+        reverse_proxy container-lock:8000/my-active-container {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /session/* {
+        reverse_proxy container-lock:8000{uri} {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /verify-caddy-config {
+        reverse_proxy container-lock:8000/verify-caddy-config {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /static/* {
+        reverse_proxy container-lock:8000{uri} {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /container-sessions {
+        reverse_proxy container-lock:8000/ {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    @not_handled {
+        not path /active*
+        not path /check-lock*
+        not path /
+        
+        not path /kali_1*
+        
+        not path /kali_2*
+        
+        not path /kali_3*
+        
+    }
+    handle @not_handled {
+        redir /lobby 302
     }
 
     
@@ -76,6 +150,27 @@
         }
         reverse_proxy kali_2:8006 {
             header_up Host kali_2:8006
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Host {host}
+        }
+    }
+    
+    route /kali_3/* {
+        uri strip_prefix /kali_3
+        sablier http://sablier:10000 {
+            names kali_3
+            session_duration 10m
+            dynamic {
+                display_name "Kali Container 3"
+                show_details true
+                theme hacker-terminal
+                refresh_frequency 5s
+            }
+        }
+        reverse_proxy kali_3:8006 {
+            header_up Host kali_3:8006
             header_up X-Real-IP {remote}
             header_up X-Forwarded-For {remote}
             header_up X-Forwarded-Proto {scheme}

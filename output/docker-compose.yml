@@ -8,7 +8,7 @@ services:
       args:
         CADDY_VERSION: "2.9.1"
     ports:
-      - "8080:80"
+      - "80:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_logs:/var/log/caddy
@@ -105,9 +105,38 @@ services:
     networks:
       - qemu-network
 
+  kali_3:
+    image: repository.ncr.ntnu.no/qemux/qemu
+    container_name: kali_3
+    environment:
+      BOOT_MODE: "legacy"
+      BOOT: "kali"
+      RAM_SIZE: "2G"
+      CPU_CORES: "2"
+    devices:
+      - /dev/kvm
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    expose:
+      - "8006"
+    volumes:
+      - ./kali_3:/storage:rw
+    restart: unless-stopped
+    labels:
+      - sablier.enable=true
+      - sablier.group=qemu-lab
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qemu-network
+
 
   redis:
-    image: redis:7.2-alpine
+    image: repository.ncr.ntnu.no/redis:7.2-alpine
     restart: always
     networks:
       - qemu-network
