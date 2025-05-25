@@ -50,6 +50,54 @@
         }
     }
 
+    handle_path /cleanup {
+        reverse_proxy container-lock:8000/cleanup {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /container/*/status {
+        reverse_proxy container-lock:8000{uri} {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /containers/status {
+        reverse_proxy container-lock:8000/containers/status {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /my-active-container {
+        reverse_proxy container-lock:8000/my-active-container {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /session/* {
+        reverse_proxy container-lock:8000{uri} {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /verify-caddy-config {
+        reverse_proxy container-lock:8000/verify-caddy-config {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /static/* {
+        reverse_proxy container-lock:8000{uri} {
+            header_up X-Real-IP {remote}
+        }
+    }
+
+    handle_path /container-sessions {
+        reverse_proxy container-lock:8000/ {
+            header_up X-Real-IP {remote}
+        }
+    }
+
     @not_handled {
         not path /active*
         not path /check-lock*
