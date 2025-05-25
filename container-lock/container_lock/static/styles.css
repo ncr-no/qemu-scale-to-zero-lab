@@ -1,0 +1,219 @@
+/* Container Button Styles */
+.container-button {
+    transition: all 0.3s ease-in-out;
+    min-height: 44px;
+    font-weight: 500;
+}
+
+.container-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.container-button:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.container-button:disabled {
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Container Card Styles */
+.container-card {
+    transition: all 0.3s ease-in-out;
+    border: 2px solid transparent;
+}
+
+.container-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.container-card.available {
+    border-color: #10b981;
+}
+
+.container-card.locked {
+    border-color: #ef4444;
+}
+
+.container-card.stopped {
+    border-color: #6b7280;
+}
+
+.container-card.loading {
+    border-color: #f59e0b;
+}
+
+.container-card.blocked {
+    border-color: #f97316;
+}
+
+.container-card.my-active {
+    border-color: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+/* Status Indicators */
+.status-indicator {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.loading-spinner {
+    animation: spin 1s linear infinite;
+}
+
+.status-icon.loading {
+    animation: spin 1s linear infinite;
+}
+
+/* Toast Notifications */
+.toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    padding: 16px;
+    max-width: 400px;
+    z-index: 1000;
+    transform: translateX(100%);
+    transition: transform 0.3s ease-in-out;
+}
+
+.toast.show {
+    transform: translateX(0);
+}
+
+.toast.success {
+    border-left: 4px solid #10b981;
+}
+
+.toast.error {
+    border-left: 4px solid #ef4444;
+}
+
+.toast.warning {
+    border-left: 4px solid #f59e0b;
+}
+
+.toast.info {
+    border-left: 4px solid #3b82f6;
+}
+
+/* Animations */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}
+
+/* Grid Layout Improvements */
+.container-grid {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.container-card {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+    .container-card {
+        padding: 16px 12px;
+    }
+    
+    .container-button {
+        padding: 12px 16px;
+        font-size: 14px;
+    }
+}
+
+/* Header improvements */
+.header-badge {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Button state specific styles */
+.btn-available {
+    background: linear-gradient(135deg, #10b981, #059669);
+    border: none;
+}
+
+.btn-available:hover:not(:disabled) {
+    background: linear-gradient(135deg, #059669, #047857);
+}
+
+.btn-locked {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.btn-stopped {
+    background: linear-gradient(135deg, #6b7280, #4b5563);
+}
+
+.btn-loading {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+.btn-blocked {
+    background: linear-gradient(135deg, #f97316, #ea580c);
+}
+
+.btn-blocked:hover:not(:disabled) {
+    background: linear-gradient(135deg, #ea580c, #c2410c);
+}
+}
+
+/* Container status badges */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.status-badge.running {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-badge.exited {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.status-badge.locked {
+    background: #fef2f2;
+    color: #991b1b;
+}
+
+.status-badge.starting {
+    background: #fef3c7;
+    color: #92400e;
+}
+.status-badge.blocked {
+    background: #fed7aa;
+    color: #9a3412;
+}

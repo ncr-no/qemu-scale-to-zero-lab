@@ -11,55 +11,394 @@
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
 
-    <script>
-      document.addEventListener('DOMContentLoaded', () => {
-        lucide.createIcons();
-      });
-    </script>
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body class="bg-gray-100 text-gray-800 font-sans">
-    <header class="flex items-center justify-between px-6 py-4 bg-white shadow-md">
-        <div class="flex items-center space-x-3">
-            <span class="text-2xl">💎</span>
-            <h1 class="text-xl font-bold">Container Sessions</h1>
+    <header class="bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <span class="text-3xl">🐳</span>
+                    <div>
+                        <h1 class="text-2xl font-bold">Container Sessions</h1>
+                        <p class="text-blue-100 text-sm">QEMU Scale-to-Zero Lab</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button
+                        id="refresh-all"
+                        class="px-4 py-2 bg-white bg-opacity-20 text-white rounded-lg hover:bg-opacity-30 transition-all duration-200 flex items-center space-x-2 backdrop-blur-sm"
+                    >
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                        <span>Refresh</span>
+                    </button>
+                    <div class="header-badge">
+                        <div class="flex items-center space-x-2">
+                            <div class="status-indicator w-2 h-2 bg-green-400 rounded-full"></div>
+                            <span>Live Updates</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </header>
 
     <main class="p-6">
-        <h2 class="text-2xl font-semibold mb-4">Active Containers</h2>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {% for container in active_containers %}
-            <div class="bg-white rounded-lg shadow-md p-4 flex flex-col items-center text-center">
-                <div class="mb-3">
-                    <i data-lucide="laptop" class="w-12 h-12 text-blue-500"></i>
-                </div>
-                <div class="text-lg font-medium mb-2">{{ container.name }} ({{ container.id[:12] }})</div>
-                <div class="text-gray-500 text-sm mb-2">Locked by: {{ container.locked_by_ip }}</div>
-                <div class="flex space-x-2">
-                    <span class="px-4 py-2 bg-gray-400 text-white rounded">In Use</span>
-                </div>
-            </div>
-            {% endfor %}
+        <div id="loading" class="text-center py-8">
+            <div class="loading-spinner w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p class="text-gray-600">Loading container status...</p>
         </div>
-        <h2 class="text-2xl font-semibold my-6">Available Containers</h2>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {% for container in available_containers %}
-            <div class="bg-white rounded-lg shadow-md p-4 flex flex-col items-center text-center">
-                <div class="mb-3">
-                    <i data-lucide="laptop" class="w-12 h-12 text-green-500"></i>
-                </div>
-                <div class="text-lg font-medium mb-2">{{ container.name }}</div>
-                <div class="text-gray-500 text-sm mb-2">Status: {{ container.status }}</div>
-                <div class="flex space-x-2">
-                    {% if container.locked_by_ip and container.status == 'running' %}
-                        <button class="px-4 py-2 bg-gray-400 text-white rounded cursor-not-allowed" disabled>In Use</button>
-                    {% else %}
-                        <a href="{{ url }}{{ container.name }}" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Connect</a>
-                    {% endif %}
+
+        <div id="container-grid" class="hidden">
+            <div id="active-container-notice" class="hidden mb-6 bg-blue-50 border-l-4 border-blue-400 p-4 rounded-lg">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i data-lucide="info" class="w-5 h-5 text-blue-400"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-blue-700">
+                            <strong>Active Session:</strong> <span id="active-container-name"></span>
+                        </p>
+                        <p class="text-xs text-blue-600 mt-1">
+                            You can only have one active container at a time.
+                            <button id="go-to-active" class="underline hover:no-underline font-medium">Go to active container</button> or
+                            <button id="release-active" class="underline hover:no-underline font-medium text-red-600">release it</button> to access others.
+                        </p>
+                    </div>
                 </div>
             </div>
-            {% endfor %}
+            
+            <h2 class="text-2xl font-semibold mb-4">Available Containers</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" id="containers-list">
+                <!-- Containers will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <div id="error-message" class="hidden text-center py-8">
+            <div class="text-red-500 mb-4">
+                <i data-lucide="alert-circle" class="w-12 h-12 mx-auto mb-2"></i>
+                <p class="text-lg font-semibold">Error Loading Containers</p>
+                <p class="text-sm">Please try refreshing the page</p>
+            </div>
         </div>
     </main>
+
+    <script>
+        // Global container management
+        let containerInstances = [];
+
+        class ContainerButton {
+            constructor(containerId, containerName, buttonElement) {
+                this.containerId = containerId;
+                this.containerName = containerName;
+                this.buttonElement = buttonElement;
+                this.isPolling = false;
+                this.pollInterval = null;
+                
+                this.init();
+            }
+            
+            init() {
+                // Start polling for status updates
+                this.startPolling();
+                
+                // Add click handler
+                this.buttonElement.addEventListener('click', (e) => this.handleClick(e));
+            }
+            
+            async handleClick(e) {
+                e.preventDefault();
+                
+                if (this.buttonElement.disabled) {
+                    return;
+                }
+                
+                // Check current status before allowing navigation
+                const status = await this.checkStatus();
+                if (status && status.is_clickable) {
+                    // Open container session page
+                    window.location.href = `/session/${this.containerName}`;
+                } else {
+                    // Show status message
+                    this.showStatusMessage(status);
+                }
+            }
+            
+            async checkStatus() {
+                try {
+                    const response = await fetch(`/container/${this.containerId}/status`);
+                    if (response.ok) {
+                        return await response.json();
+                    }
+                } catch (error) {
+                    console.error(`Error checking status for ${this.containerId}:`, error);
+                }
+                return null;
+            }
+            
+            async updateButtonState() {
+                const status = await this.checkStatus();
+                if (status) {
+                    this.updateButton(status);
+                }
+            }
+            
+            updateButton(status) {
+                const button = this.buttonElement;
+                const iconElement = button.querySelector('.status-icon');
+                const textElement = button.querySelector('.button-text');
+                const containerCard = button.closest('.container-card');
+                const statusElement = containerCard.querySelector('.status-text');
+                
+                // Remove all state classes from card
+                containerCard.classList.remove('available', 'locked', 'stopped', 'loading', 'blocked', 'my-active');
+                
+                // Check if this is the user's active container
+                if (status.is_my_active) {
+                    // This is the user's current active container
+                    button.disabled = false;
+                    button.className = 'container-button btn-available w-full px-4 py-2 text-white rounded flex items-center justify-center space-x-2 ring-2 ring-green-300';
+                    iconElement.className = 'status-icon w-4 h-4';
+                    iconElement.setAttribute('data-lucide', 'external-link');
+                    textElement.textContent = 'Go to Active';
+                    statusElement.innerHTML = `<span class="status-badge running">🟢 Your Active Container</span>`;
+                    containerCard.classList.add('my-active');
+                } else if (status.blocked_reason) {
+                    // User has another active container, this one is blocked
+                    button.disabled = true;
+                    button.className = 'container-button btn-blocked w-full px-4 py-2 bg-orange-500 text-white rounded cursor-not-allowed opacity-75 flex items-center justify-center space-x-2';
+                    iconElement.className = 'status-icon w-4 h-4';
+                    iconElement.setAttribute('data-lucide', 'ban');
+                    textElement.textContent = 'Blocked';
+                    statusElement.innerHTML = `<span class="status-badge blocked">⚠️ ${status.blocked_reason}</span>`;
+                    containerCard.classList.add('blocked');
+                } else if (status.is_clickable) {
+                    // Container is available and clickable
+                    button.disabled = false;
+                    button.className = 'container-button btn-available w-full px-4 py-2 text-white rounded flex items-center justify-center space-x-2';
+                    iconElement.className = 'status-icon w-4 h-4';
+                    iconElement.setAttribute('data-lucide', 'play-circle');
+                    textElement.textContent = 'Connect';
+                    statusElement.innerHTML = `<span class="status-badge running">● ${status.container_status}</span>`;
+                    containerCard.classList.add('available');
+                } else if (status.is_locked) {
+                    // Container is locked by another user
+                    button.disabled = true;
+                    button.className = 'container-button btn-locked w-full px-4 py-2 text-white rounded cursor-not-allowed opacity-75 flex items-center justify-center space-x-2';
+                    iconElement.className = 'status-icon w-4 h-4';
+                    iconElement.setAttribute('data-lucide', 'lock');
+                    textElement.textContent = 'In Use';
+                    statusElement.innerHTML = `<span class="status-badge locked">🔒 Locked by ${status.locked_by_ip}</span>`;
+                    containerCard.classList.add('locked');
+                } else if (status.container_status === 'exited') {
+                    // Container is exited
+                    button.disabled = true;
+                    button.className = 'container-button btn-stopped w-full px-4 py-2 text-white rounded cursor-not-allowed opacity-75 flex items-center justify-center space-x-2';
+                    iconElement.className = 'status-icon w-4 h-4';
+                    iconElement.setAttribute('data-lucide', 'square');
+                    textElement.textContent = 'Stopped';
+                    statusElement.innerHTML = `<span class="status-badge exited">⏹ ${status.container_status}</span>`;
+                    containerCard.classList.add('stopped');
+                } else {
+                    // Container is in some other state (starting, etc.)
+                    button.disabled = true;
+                    button.className = 'container-button btn-loading w-full px-4 py-2 text-white rounded cursor-not-allowed opacity-75 flex items-center justify-center space-x-2';
+                    iconElement.className = 'status-icon loading w-4 h-4';
+                    iconElement.setAttribute('data-lucide', 'loader');
+                    textElement.textContent = 'Loading...';
+                    statusElement.innerHTML = `<span class="status-badge starting">⏳ ${status.container_status}</span>`;
+                    containerCard.classList.add('loading');
+                }
+                
+                // Re-create icons after updating data-lucide attributes
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }
+            
+            showStatusMessage(status) {
+                if (!status) {
+                    alert('Unable to check container status. Please try again.');
+                    return;
+                }
+                
+                if (status.is_locked) {
+                    alert(`Container is currently in use by ${status.locked_by_ip}`);
+                } else if (status.container_status === 'exited') {
+                    alert('Container is stopped. Please wait for it to start.');
+                } else {
+                    alert(`Container is not available. Status: ${status.container_status}`);
+                }
+            }
+            
+            startPolling() {
+                if (this.isPolling) return;
+                
+                this.isPolling = true;
+                // Update immediately
+                this.updateButtonState();
+                
+                // Then poll every 5 seconds
+                this.pollInterval = setInterval(() => {
+                    this.updateButtonState();
+                }, 5000);
+            }
+            
+            stopPolling() {
+                if (this.pollInterval) {
+                    clearInterval(this.pollInterval);
+                    this.pollInterval = null;
+                }
+                this.isPolling = false;
+            }
+            
+            destroy() {
+                this.stopPolling();
+                this.buttonElement.removeEventListener('click', this.handleClick);
+            }
+        }
+
+        // Initialize containers and load data
+        async function loadContainers() {
+            const loadingEl = document.getElementById('loading');
+            const containerGridEl = document.getElementById('container-grid');
+            const errorEl = document.getElementById('error-message');
+            const containersList = document.getElementById('containers-list');
+            const activeNoticeEl = document.getElementById('active-container-notice');
+            const activeNameEl = document.getElementById('active-container-name');
+            const goToActiveBtn = document.getElementById('go-to-active');
+            const releaseActiveBtn = document.getElementById('release-active');
+
+            try {
+                loadingEl.classList.remove('hidden');
+                containerGridEl.classList.add('hidden');
+                errorEl.classList.add('hidden');
+
+                const response = await fetch('/containers/status');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch container status');
+                }
+
+                const data = await response.json();
+                const containers = data.containers || [];
+                const userActiveContainer = data.user_active_container;
+
+                // Handle active container notice
+                if (userActiveContainer) {
+                    activeNameEl.textContent = userActiveContainer.container_name;
+                    activeNoticeEl.classList.remove('hidden');
+                    
+                    // Set up go to active button
+                    goToActiveBtn.onclick = () => {
+                        window.location.href = `/session/${userActiveContainer.container_name}`;
+                    };
+                    
+                    // Set up release button
+                    releaseActiveBtn.onclick = async () => {
+                        if (confirm('Are you sure you want to release your active container? This will end your session.')) {
+                            try {
+                                const releaseResponse = await fetch('/release', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' }
+                                });
+                                if (releaseResponse.ok) {
+                                    // Refresh the page after successful release
+                                    window.location.reload();
+                                } else {
+                                    alert('Failed to release container. Please try again.');
+                                }
+                            } catch (error) {
+                                console.error('Error releasing container:', error);
+                                alert('Error releasing container. Please try again.');
+                            }
+                        }
+                    };
+                } else {
+                    activeNoticeEl.classList.add('hidden');
+                }
+
+                // Clear existing containers
+                containersList.innerHTML = '';
+                
+                // Destroy existing instances
+                containerInstances.forEach(instance => instance.destroy());
+                containerInstances = [];
+
+                // Create container cards
+                containers.forEach(container => {
+                    const containerCard = createContainerCard(container);
+                    containersList.appendChild(containerCard);
+                    
+                    // Initialize button instance
+                    const button = containerCard.querySelector('.container-button');
+                    if (button) {
+                        const instance = new ContainerButton(container.id, container.name, button);
+                        containerInstances.push(instance);
+                    }
+                });
+
+                loadingEl.classList.add('hidden');
+                containerGridEl.classList.remove('hidden');
+
+                // Initialize lucide icons
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+
+            } catch (error) {
+                console.error('Error loading containers:', error);
+                loadingEl.classList.add('hidden');
+                errorEl.classList.remove('hidden');
+            }
+        }
+
+        function createContainerCard(container) {
+            const card = document.createElement('div');
+            card.className = 'container-card bg-white rounded-lg shadow-md p-6 flex flex-col items-center text-center loading';
+            
+            card.innerHTML = `
+                <div class="mb-4">
+                    <i data-lucide="laptop" class="w-16 h-16 text-blue-500"></i>
+                </div>
+                <div class="text-xl font-semibold mb-2 text-gray-800">${container.name}</div>
+                <div class="text-gray-500 text-xs mb-1 font-mono">ID: ${container.id.substring(0, 12)}</div>
+                <div class="status-text mb-4">
+                    <span class="status-badge starting">⏳ Loading...</span>
+                </div>
+                <button
+                    class="container-button btn-loading w-full px-4 py-2 text-white rounded cursor-not-allowed opacity-75 flex items-center justify-center space-x-2"
+                    data-container-id="${container.id}"
+                    data-container-name="${container.name}"
+                    disabled
+                >
+                    <i class="status-icon loading w-4 h-4" data-lucide="loader"></i>
+                    <span class="button-text">Loading...</span>
+                </button>
+            `;
+            
+            return card;
+        }
+
+        // Initialize on DOM load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load containers initially
+            loadContainers();
+            
+            // Setup refresh button
+            const refreshButton = document.getElementById('refresh-all');
+            refreshButton.addEventListener('click', loadContainers);
+            
+            // Initialize lucide icons
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
+            
+            // Cleanup on page unload
+            window.addEventListener('beforeunload', () => {
+                containerInstances.forEach(instance => instance.destroy());
+            });
+        });
+    </script>
 </body>
 </html>

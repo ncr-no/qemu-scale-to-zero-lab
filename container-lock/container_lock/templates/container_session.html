@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Container Session - {{ container_name }}</title>
+    
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        .session-iframe {
+            width: 100%;
+            height: calc(100vh - 120px);
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .session-controls {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(229, 231, 235, 0.8);
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .status-active { background-color: #10b981; }
+        .status-warning { background-color: #f59e0b; }
+        .status-error { background-color: #ef4444; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Session Controls -->
+    <div class="session-controls">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-2xl">🐳</span>
+                        <div>
+                            <h1 class="text-xl font-bold text-gray-800">{{ container_name }}</h1>
+                            <div class="flex items-center text-sm text-gray-600">
+                                <span class="status-indicator status-active" id="status-indicator"></span>
+                                <span id="status-text">Active Session</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">
+                        ID: {{ container_id[:12] }}
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-3">
+                    <button
+                        id="refresh-iframe"
+                        class="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center space-x-2"
+                        title="Refresh Container"
+                    >
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                        <span class="hidden sm:inline">Refresh</span>
+                    </button>
+                    
+                    <button
+                        id="verify-config"
+                        class="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center space-x-2"
+                        title="Verify Configuration"
+                    >
+                        <i data-lucide="check-circle" class="w-4 h-4"></i>
+                        <span class="hidden sm:inline">Verify</span>
+                    </button>
+                    
+                    <button
+                        id="end-session"
+                        class="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center space-x-2"
+                        title="End Session"
+                    >
+                        <i data-lucide="log-out" class="w-4 h-4"></i>
+                        <span class="hidden sm:inline">End Session</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Session Info -->
+            <div class="mt-3 flex items-center space-x-6 text-sm text-gray-600">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="clock" class="w-4 h-4"></i>
+                    <span>Session Time: <span id="session-duration">00:00</span></span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="activity" class="w-4 h-4"></i>
+                    <span>Auto-shutdown: <span id="idle-timeout">10m idle</span></span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="globe" class="w-4 h-4"></i>
+                    <span>URL: <code class="bg-gray-100 px-1 rounded">{{ container_url }}</code></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="p-6">
+        <div class="relative">
+            <!-- Loading Overlay -->
+            <div id="loading-overlay" class="loading-overlay">
+                <div class="text-center">
+                    <div class="loading-spinner w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p class="text-gray-600">Loading container...</p>
+                    <p class="text-sm text-gray-500 mt-2">This may take a few moments if the container is starting up</p>
+                </div>
+            </div>
+            
+            <!-- Container IFRAME -->
+            <iframe
+                id="container-iframe"
+                class="session-iframe"
+                src="{{ container_url }}"
+                title="Container Session - {{ container_name }}"
+                allow="fullscreen"
+                loading="lazy"
+            ></iframe>
+        </div>
+    </div>
+
+    <!-- Session End Dialog -->
+    <div id="session-end-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 max-w-md w-mx-4">
+            <div class="flex items-center space-x-3 mb-4">
+                <i data-lucide="alert-triangle" class="w-6 h-6 text-orange-500"></i>
+                <h3 class="text-lg font-semibold">End Session?</h3>
+            </div>
+            <p class="text-gray-600 mb-6">
+                Are you sure you want to end this container session? This will release the container and you may lose any unsaved work.
+            </p>
+            <div class="flex space-x-3">
+                <button id="confirm-end-session" class="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">
+                    End Session
+                </button>
+                <button id="cancel-end-session" class="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class ContainerSession {
+            constructor(containerId, containerName, containerUrl) {
+                this.containerId = containerId;
+                this.containerName = containerName;
+                this.containerUrl = containerUrl;
+                this.sessionStartTime = new Date();
+                this.isActive = true;
+                this.statusCheckInterval = null;
+                this.sessionTimer = null;
+                this.hasAcquiredLock = false;
+                
+                this.init();
+            }
+            
+            init() {
+                this.setupEventListeners();
+                this.setupIframeHandlers();
+                this.acquireLock();
+                this.startStatusChecking();
+                this.startSessionTimer();
+                this.setupBeforeUnloadHandler();
+                
+                // Initialize lucide icons
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }
+            
+            setupEventListeners() {
+                // Refresh iframe
+                document.getElementById('refresh-iframe').addEventListener('click', () => {
+                    this.refreshIframe();
+                });
+                
+                // Verify configuration
+                document.getElementById('verify-config').addEventListener('click', () => {
+                    this.verifyConfiguration();
+                });
+                
+                // End session
+                document.getElementById('end-session').addEventListener('click', () => {
+                    this.showEndSessionDialog();
+                });
+                
+                // Dialog handlers
+                document.getElementById('confirm-end-session').addEventListener('click', () => {
+                    this.endSession();
+                });
+                
+                document.getElementById('cancel-end-session').addEventListener('click', () => {
+                    this.hideEndSessionDialog();
+                });
+            }
+            
+            setupIframeHandlers() {
+                const iframe = document.getElementById('container-iframe');
+                const loadingOverlay = document.getElementById('loading-overlay');
+                
+                iframe.addEventListener('load', () => {
+                    setTimeout(() => {
+                        loadingOverlay.classList.add('hidden');
+                        this.updateStatus('active', 'Container loaded successfully');
+                    }, 1000);
+                });
+                
+                iframe.addEventListener('error', () => {
+                    loadingOverlay.classList.add('hidden');
+                    this.updateStatus('error', 'Failed to load container');
+                });
+            }
+            
+            async acquireLock() {
+                try {
+                    const response = await fetch('/acquire', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: `container_id=${encodeURIComponent(this.containerId)}`
+                    });
+                    
+                    if (response.ok) {
+                        this.hasAcquiredLock = true;
+                        console.log('Successfully acquired container lock');
+                    } else {
+                        const error = await response.text();
+                        console.error('Failed to acquire lock:', error);
+                        this.updateStatus('error', 'Failed to acquire container lock');
+                    }
+                } catch (error) {
+                    console.error('Error acquiring lock:', error);
+                    this.updateStatus('error', 'Error acquiring container lock');
+                }
+            }
+            
+            async releaseLock() {
+                if (!this.hasAcquiredLock) return;
+                
+                try {
+                    const response = await fetch('/release', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        this.hasAcquiredLock = false;
+                        console.log('Successfully released container lock');
+                    } else {
+                        console.error('Failed to release lock');
+                    }
+                } catch (error) {
+                    console.error('Error releasing lock:', error);
+                }
+            }
+            
+            startStatusChecking() {
+                this.statusCheckInterval = setInterval(async () => {
+                    if (!this.isActive) return;
+                    
+                    try {
+                        const response = await fetch(`/container/${this.containerId}/status`);
+                        if (response.ok) {
+                            const status = await response.json();
+                            
+                            if (!status.is_clickable && !status.is_my_active) {
+                                // Container is no longer available or not ours
+                                this.updateStatus('warning', 'Container session may have expired');
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error checking status:', error);
+                    }
+                }, 10000); // Check every 10 seconds
+            }
+            
+            startSessionTimer() {
+                this.sessionTimer = setInterval(() => {
+                    if (!this.isActive) return;
+                    
+                    const duration = new Date() - this.sessionStartTime;
+                    const minutes = Math.floor(duration / 60000);
+                    const seconds = Math.floor((duration % 60000) / 1000);
+                    
+                    document.getElementById('session-duration').textContent = 
+                        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                }, 1000);
+            }
+            
+            updateStatus(type, message) {
+                const indicator = document.getElementById('status-indicator');
+                const text = document.getElementById('status-text');
+                
+                indicator.className = `status-indicator status-${type}`;
+                text.textContent = message;
+            }
+            
+            refreshIframe() {
+                const iframe = document.getElementById('container-iframe');
+                const loadingOverlay = document.getElementById('loading-overlay');
+                
+                loadingOverlay.classList.remove('hidden');
+                this.updateStatus('warning', 'Refreshing container...');
+                
+                iframe.src = iframe.src;
+            }
+            
+            async verifyConfiguration() {
+                this.updateStatus('warning', 'Verifying configuration...');
+                
+                try {
+                    // Check if the container URL is accessible
+                    const response = await fetch(this.containerUrl, { 
+                        method: 'HEAD',
+                        mode: 'no-cors' 
+                    });
+                    
+                    // Since we're using no-cors, we can't check the actual response
+                    // but we can verify the URL is properly formed
+                    const url = new URL(this.containerUrl);
+                    if (url.pathname.includes(this.containerName)) {
+                        this.updateStatus('active', 'Configuration verified');
+                        
+                        // Show success message
+                        this.showNotification('Configuration verified successfully', 'success');
+                    } else {
+                        this.updateStatus('error', 'Configuration mismatch');
+                        this.showNotification('Configuration verification failed', 'error');
+                    }
+                } catch (error) {
+                    console.error('Configuration verification error:', error);
+                    this.updateStatus('error', 'Configuration verification failed');
+                    this.showNotification('Configuration verification failed', 'error');
+                }
+            }
+            
+            showNotification(message, type = 'info') {
+                // Create notification element
+                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm ${
+                    type === 'success' ? 'bg-green-500 text-white' :
+                    type === 'error' ? 'bg-red-500 text-white' :
+                    'bg-blue-500 text-white'
+                }`;
+                notification.textContent = message;
+                
+                document.body.appendChild(notification);
+                
+                // Remove after 3 seconds
+                setTimeout(() => {
+                    notification.remove();
+                }, 3000);
+            }
+            
+            showEndSessionDialog() {
+                document.getElementById('session-end-dialog').classList.remove('hidden');
+            }
+            
+            hideEndSessionDialog() {
+                document.getElementById('session-end-dialog').classList.add('hidden');
+            }
+            
+            async endSession() {
+                this.isActive = false;
+                this.hideEndSessionDialog();
+                
+                // Release the lock
+                await this.releaseLock();
+                
+                // Cleanup timers
+                if (this.statusCheckInterval) {
+                    clearInterval(this.statusCheckInterval);
+                }
+                if (this.sessionTimer) {
+                    clearInterval(this.sessionTimer);
+                }
+                
+                // Redirect back to main page
+                window.location.href = '/';
+            }
+            
+            setupBeforeUnloadHandler() {
+                window.addEventListener('beforeunload', (e) => {
+                    if (this.isActive && this.hasAcquiredLock) {
+                        // Show browser's confirmation dialog
+                        e.preventDefault();
+                        e.returnValue = 'You have an active container session. Are you sure you want to leave?';
+                        
+                        // Attempt to release lock (may not complete due to page unload)
+                        this.releaseLock();
+                        
+                        return e.returnValue;
+                    }
+                });
+                
+                // Handle page visibility changes (tab switching, minimizing)
+                document.addEventListener('visibilitychange', () => {
+                    if (document.hidden) {
+                        console.log('Page hidden - session still active');
+                    } else {
+                        console.log('Page visible - resuming session');
+                    }
+                });
+            }
+            
+            destroy() {
+                this.isActive = false;
+                
+                if (this.statusCheckInterval) {
+                    clearInterval(this.statusCheckInterval);
+                }
+                if (this.sessionTimer) {
+                    clearInterval(this.sessionTimer);
+                }
+                
+                this.releaseLock();
+            }
+        }
+        
+        // Initialize the session
+        document.addEventListener('DOMContentLoaded', () => {
+            const containerId = '{{ container_id }}';
+            const containerName = '{{ container_name }}';
+            const containerUrl = '{{ container_url }}';
+            
+            window.containerSession = new ContainerSession(containerId, containerName, containerUrl);
+        });
+        
+        // Cleanup on page unload
+        window.addEventListener('unload', () => {
+            if (window.containerSession) {
+                window.containerSession.destroy();
+            }
+        });
+    </script>
+</body>
+</html>
