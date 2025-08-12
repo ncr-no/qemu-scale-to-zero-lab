@@ -38,6 +38,12 @@ def validate_volume_path(path):
     
     return abs_path
 
+def validate_file_path(path):
+    abs_path = os.path.abspath(path)
+    if not os.path.isfile(abs_path):
+        raise argparse.ArgumentTypeError(f"File does not exist: {abs_path}")
+    return abs_path
+
 def show_config_summary(args):
     print("\n🔧 Current Configuration:")
     print("------------------------")
@@ -50,8 +56,11 @@ def show_config_summary(args):
     print(f"📂 Volume Path: {args.volume_prefix}")
     print("------------------------\n")
 
-def check_output_directory():
+def check_output_directory(force: bool = False):
     output_dir = 'output'
+    if force:
+        os.makedirs(output_dir, exist_ok=True)
+        return
     if os.path.exists(output_dir):
         files = [f for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f))]
         if files:
@@ -66,7 +75,7 @@ def check_output_directory():
 
 def render_templates(args):
     # Check output directory
-    check_output_directory()
+    check_output_directory(force=getattr(args, 'force', False))
     
     # Setup Jinja2 environment
     env = Environment(loader=FileSystemLoader('templates'))
@@ -82,7 +91,12 @@ def render_templates(args):
         'ram_size': args.ram_size,
         'cpu_cores': args.cpu_cores,
         'container_prefix': container_prefix,
-        'volume_prefix': args.volume_prefix
+        'volume_prefix': args.volume_prefix,
+        # TLS Docker options (None if not provided)
+        'docker_host': getattr(args, 'docker_host', None),
+        'docker_ca': getattr(args, 'docker_ca', None),
+        'docker_cert': getattr(args, 'docker_cert', None),
+        'docker_key': getattr(args, 'docker_key', None),
     }
     
     # Ensure output directory exists
@@ -122,6 +136,16 @@ def main():
                       help='Custom container name prefix (default: boot image name)')
     parser.add_argument('--volume-prefix', type=validate_volume_path, default=DEFAULT_VOLUME_PREFIX,
                       help=f'Volume path prefix (default: {DEFAULT_VOLUME_PREFIX})')
+    # TLS / remote Docker options
+    parser.add_argument('--docker-host', default=None,
+                      help='Remote Docker host, e.g. tcp://host:2376 (enables TLS config in compose if set)')
+    parser.add_argument('--docker-ca', type=validate_file_path, default=None,
+                      help='Path to Docker TLS CA certificate (ca.pem)')
+    parser.add_argument('--docker-cert', type=validate_file_path, default=None,
+                      help='Path to Docker TLS client certificate (cert.pem)')
+    parser.add_argument('--docker-key', type=validate_file_path, default=None,
+                      help='Path to Docker TLS client key (key.pem)')
+    parser.add_argument('--force', action='store_true', help='Overwrite files in output/ without confirmation')
     
     args = parser.parse_args()
     show_config_summary(args)
