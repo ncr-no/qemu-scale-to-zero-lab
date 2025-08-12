@@ -2,7 +2,6 @@
 
 import argparse
 from jinja2 import Environment, FileSystemLoader
-import yaml
 import os
 import sys
 
@@ -44,6 +43,160 @@ def validate_file_path(path):
         raise argparse.ArgumentTypeError(f"File does not exist: {abs_path}")
     return abs_path
 
+def validate_tls_config(args):
+    """Validate TLS configuration when using remote Docker host"""
+    if args.docker_host and not all([args.docker_ca, args.docker_cert, args.docker_key]):
+        raise argparse.ArgumentTypeError(
+            "When specifying --docker-host, all TLS certificates (--docker-ca, --docker-cert, --docker-key) must be provided"
+        )
+
+def get_user_input():
+    """Get configuration from user input"""
+    print("🚀 QEMU Scale-to-Zero Configuration Generator")
+    print("=" * 50)
+    
+    # Ask user preference
+    print("Choose configuration mode:")
+    print("1. Use defaults (quick setup)")
+    print("2. Customize all settings")
+    
+    while True:
+        choice = input("\nEnter your choice (1 or 2): ").strip()
+        if choice == "1":
+            print("\n✅ Using default configuration...")
+            return argparse.Namespace(
+                num_containers=DEFAULT_CONTAINERS,
+                boot_mode=DEFAULT_BOOT_MODE,
+                boot_image=DEFAULT_BOOT_IMAGE,
+                ram_size=DEFAULT_RAM_SIZE,
+                cpu_cores=DEFAULT_CPU_CORES,
+                prefix=None,
+                volume_prefix=DEFAULT_VOLUME_PREFIX,
+                docker_host="tcp://localhost:2376",
+                docker_ca="/etc/certs/ca.pem",
+                docker_cert="/etc/certs/cert.pem",
+                docker_key="/etc/certs/key.pem",
+                force=False
+            )
+        elif choice == "2":
+            print("\n🔧 Custom configuration mode...")
+            break
+        else:
+            print("❌ Please enter 1 or 2")
+    
+    # Number of containers
+    while True:
+        try:
+            num_containers = input(f"Number of containers (default: {DEFAULT_CONTAINERS}): ").strip()
+            if not num_containers:
+                num_containers = DEFAULT_CONTAINERS
+            else:
+                num_containers = validate_container_count(num_containers)
+            break
+        except argparse.ArgumentTypeError as e:
+            print(f"❌ {e}")
+    
+    # Boot mode
+    while True:
+        boot_mode = input(f"Boot mode (default: {DEFAULT_BOOT_MODE}, options: {', '.join(VALID_BOOT_MODES)}): ").strip()
+        if not boot_mode:
+            boot_mode = DEFAULT_BOOT_MODE
+        else:
+            try:
+                boot_mode = validate_boot_mode(boot_mode)
+                break
+            except argparse.ArgumentTypeError as e:
+                print(f"❌ {e}")
+    
+    # Boot image
+    boot_image = input(f"Boot image (default: {DEFAULT_BOOT_IMAGE}): ").strip()
+    if not boot_image:
+        boot_image = DEFAULT_BOOT_IMAGE
+    
+    # RAM size
+    ram_size = input(f"RAM size per container (default: {DEFAULT_RAM_SIZE}): ").strip()
+    if not ram_size:
+        ram_size = DEFAULT_RAM_SIZE
+    
+    # CPU cores
+    cpu_cores = input(f"CPU cores per container (default: {DEFAULT_CPU_CORES}): ").strip()
+    if not cpu_cores:
+        cpu_cores = DEFAULT_CPU_CORES
+    
+    # Custom prefix
+    prefix = input("Custom container name prefix (default: boot image name): ").strip()
+    if not prefix:
+        prefix = None
+    
+    # Volume path
+    while True:
+        volume_prefix = input(f"Volume path prefix (default: {DEFAULT_VOLUME_PREFIX}): ").strip()
+        if not volume_prefix:
+            volume_prefix = DEFAULT_VOLUME_PREFIX
+        else:
+            try:
+                volume_prefix = validate_volume_path(volume_prefix)
+                break
+            except argparse.ArgumentTypeError as e:
+                print(f"❌ {e}")
+    
+    # Docker configuration
+    print("\n🐳 Docker Configuration:")
+    docker_host = input("Remote Docker host (e.g., tcp://host:2376) or press Enter for local: ").strip()
+    if not docker_host:
+        docker_host = None
+        docker_ca = None
+        docker_cert = None
+        docker_key = None
+    else:
+        while True:
+            docker_ca = input("Path to Docker TLS CA certificate (ca.pem): ").strip()
+            if not docker_ca:
+                print("❌ CA certificate is required for remote Docker")
+                continue
+            try:
+                break
+            except argparse.ArgumentTypeError as e:
+                print(f"❌ {e}")
+        
+        while True:
+            docker_cert = input("Path to Docker TLS client certificate (cert.pem): ").strip()
+            if not docker_cert:
+                print("❌ Client certificate is required for remote Docker")
+                continue
+            try:
+                break
+            except argparse.ArgumentTypeError as e:
+                print(f"❌ {e}")
+        
+        while True:
+            docker_key = input("Path to Docker TLS client key (key.pem): ").strip()
+            if not docker_key:
+                print("❌ Client key is required for remote Docker")
+                continue
+            try:
+                break
+            except argparse.ArgumentTypeError as e:
+                print(f"❌ {e}")
+    
+    # Force overwrite
+    force = input("\nForce overwrite output files? [y/N]: ").strip().lower() == 'y'
+    
+    return argparse.Namespace(
+        num_containers=num_containers,
+        boot_mode=boot_mode,
+        boot_image=boot_image,
+        ram_size=ram_size,
+        cpu_cores=cpu_cores,
+        prefix=prefix,
+        volume_prefix=volume_prefix,
+        docker_host=docker_host,
+        docker_ca=docker_ca,
+        docker_cert=docker_cert,
+        docker_key=docker_key,
+        force=force
+    )
+
 def show_config_summary(args):
     print("\n🔧 Current Configuration:")
     print("------------------------")
@@ -54,6 +207,16 @@ def show_config_summary(args):
     print(f"🧠 RAM: {args.ram_size}")
     print(f"⚡ CPU Cores: {args.cpu_cores}")
     print(f"📂 Volume Path: {args.volume_prefix}")
+    
+    # TLS Docker configuration
+    if args.docker_host:
+        print(f"🐳 Docker Host: {args.docker_host}")
+        print(f"🔐 TLS CA: {args.docker_ca}")
+        print(f"🔑 TLS Cert: {args.docker_cert}")
+        print(f"🔑 TLS Key: {args.docker_key}")
+    else:
+        print("🐳 Docker: Local (no TLS)")
+    
     print("------------------------\n")
 
 def check_output_directory(force: bool = False):
@@ -138,16 +301,28 @@ def main():
                       help=f'Volume path prefix (default: {DEFAULT_VOLUME_PREFIX})')
     # TLS / remote Docker options
     parser.add_argument('--docker-host', default=None,
-                      help='Remote Docker host, e.g. tcp://host:2376 (enables TLS config in compose if set)')
+                      help='Remote Docker host, e.g. tcp://host:2376 or tcp://192.168.1.100:2376')
     parser.add_argument('--docker-ca', type=validate_file_path, default=None,
-                      help='Path to Docker TLS CA certificate (ca.pem)')
+                      help='Path to Docker TLS CA certificate file (e.g., /path/to/ca.pem)')
     parser.add_argument('--docker-cert', type=validate_file_path, default=None,
-                      help='Path to Docker TLS client certificate (cert.pem)')
+                      help='Path to Docker TLS client certificate file (e.g., /path/to/cert.pem)')
     parser.add_argument('--docker-key', type=validate_file_path, default=None,
-                      help='Path to Docker TLS client key (key.pem)')
+                      help='Path to Docker TLS client key file (e.g., /path/to/key.pem)')
     parser.add_argument('--force', action='store_true', help='Overwrite files in output/ without confirmation')
+    parser.add_argument('--non-interactive', action='store_true', help='Run with defaults without prompting')
     
     args = parser.parse_args()
+    
+    # If no arguments provided or non-interactive flag not set, run interactively
+    if len(sys.argv) == 1 or not args.non_interactive:
+        args = get_user_input()
+    
+    # Validate TLS configuration
+    try:
+        validate_tls_config(args)
+    except argparse.ArgumentTypeError as e:
+        parser.error(str(e))
+    
     show_config_summary(args)
     render_templates(args)
 
