@@ -3,8 +3,8 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-    args:
-      CADDY_VERSION: "2.9.1"
+      args:
+        CADDY_VERSION: "2.9.1"
     ports:
       - "80:80"
     volumes:
@@ -16,9 +16,9 @@ services:
       - redis
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost"]
-    interval: 10s
-    timeout: 5s
-    retries: 5
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - qemu-network
 
