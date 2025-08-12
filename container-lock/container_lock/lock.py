@@ -400,7 +400,7 @@ def get_container_lock_status(container_id: str, redis_client=None) -> dict:
         
         is_locked = locked_by_ip is not None
         # Container is clickable if it's not locked and running
-        is_clickable = not is_locked and container_status == 'running'
+        is_clickable = not is_locked and container_status == 'running' or container_status == 'exited'
         
         return {
             "container_id": container_id,
