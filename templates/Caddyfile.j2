@@ -23,96 +23,21 @@
         level ERROR
     }
 
-    respond / "QEMU scale-to-zero lab. Access VMs at /{{ container_prefix }}_1 through /{{ container_prefix }}_{{ n }}" 200
+    # Host container-lock at root
+    handle_path / {
+        reverse_proxy container-lock:8000 {
+            header_up X-Real-IP {remote}
+        }
+    }
 
-    @containers path {% for i in range(1, n + 1) %}/{{ container_prefix }}_{{ i }}{% if not loop.last %} {% endif %}{% endfor %}
+    # Redirect container paths to add trailing slash
+    @containers path {% for i in range(1, n + 1) %}/vm/{{ container_prefix }}_{{ i }}{% if not loop.last %} {% endif %}{% endfor %}
     redir @containers {http.request.uri.path}/ permanent
 
-    route /lobby/* {
-        respond "You are in the lobby. Please wait for a container to become available." 200
-    }
-
-    handle_path /check-lock {
-        reverse_proxy container-lock:8000/check {
-            header_up X-Real-IP {remote}
-        }
-    }
-
-    handle_path /acquire {
-        reverse_proxy container-lock:8000/acquire {
-            header_up X-Real-IP {remote}
-        }
-    }
-
-    handle_path /release {
-        reverse_proxy container-lock:8000/release {
-            header_up X-Real-IP {remote}
-        }
-    }
-
-    handle_path /cleanup {
-        reverse_proxy container-lock:8000/cleanup {
-            header_up X-Real-IP {remote}
-        }
-    }
-
-    handle_path /container/*/status {
-        reverse_proxy container-lock:8000{uri} {
-            header_up X-Real-IP {remote}
-        }
-    }
-
-    handle_path /containers/status {
-        reverse_proxy container-lock:8000/containers/status {
-            header_up X-Real-IP {remote}
-        }
-    }
-
-    handle_path /my-active-container {
-        reverse_proxy container-lock:8000/my-active-container {
-            header_up X-Real-IP {remote}
-        }
-    }
-
-    handle_path /session/* {
-        reverse_proxy container-lock:8000{uri} {
-            header_up X-Real-IP {remote}
-        }
-    }
-
-    handle_path /verify-caddy-config {
-        reverse_proxy container-lock:8000/verify-caddy-config {
-            header_up X-Real-IP {remote}
-        }
-    }
-
-    handle_path /static/* {
-        reverse_proxy container-lock:8000{uri} {
-            header_up X-Real-IP {remote}
-        }
-    }
-
-    handle_path /container-sessions {
-        reverse_proxy container-lock:8000/ {
-            header_up X-Real-IP {remote}
-        }
-    }
-
-    @not_handled {
-        not path /active*
-        not path /check-lock*
-        not path /
-        {% for i in range(1, n + 1) %}
-        not path /{{ container_prefix }}_{{ i }}*
-        {% endfor %}
-    }
-    handle @not_handled {
-        redir /lobby 302
-    }
-
+    # VM routes moved to /vm/{{ container_prefix }}_* paths
     {% for i in range(1, n + 1) %}
-    route /{{ container_prefix }}_{{ i }}/* {
-        uri strip_prefix /{{ container_prefix }}_{{ i }}
+    route /vm/{{ container_prefix }}_{{ i }}/* {
+        uri strip_prefix /vm/{{ container_prefix }}_{{ i }}
         sablier http://sablier:10000 {
             names {{ container_prefix }}_{{ i }}
             session_duration 10m
@@ -132,4 +57,16 @@
         }
     }
     {% endfor %}
+
+    # Redirect unmatched paths to container-lock
+    @not_handled {
+        {% for i in range(1, n + 1) %}
+        not path /vm/{{ container_prefix }}_{{ i }}*
+        {% endfor %}
+    }
+    handle @not_handled {
+        reverse_proxy container-lock:8000 {
+            header_up X-Real-IP {remote}
+        }
+    }
 }
