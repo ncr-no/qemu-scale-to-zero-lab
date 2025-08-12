@@ -12,7 +12,7 @@ uv sync
 ## Usage
 ```bash
 # Start the service
-uv run uvicorn container_lock.main:app --host 0.0.1 --port 8000
+uv run uvicorn container_lock.main:app --host 127.0.0.1 --port 8000
 ```
 
 ## Docker
