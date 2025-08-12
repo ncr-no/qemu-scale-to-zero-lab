@@ -1,6 +1,10 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, HTMLResponse
-from container_lock.lock import acquire_lock, list_all_containers, release_lock, get_locked_container, get_active_containers, list_all_containers_with_locks, cleanup_exited_containers, get_container_lock_status, get_user_active_container
+from container_lock.lock import (
+    acquire_lock, list_all_containers, release_lock, get_locked_container, 
+    get_active_containers, list_all_containers_with_locks, cleanup_exited_containers, 
+    get_container_lock_status, get_user_active_container, test_docker_connection
+)
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import logging
@@ -128,11 +132,18 @@ async def get_active():
 
 @app.get("/health")
 async def health():
-    """
-    Root endpoint for health check
-    """
-    logger.info("[ROOT] Health check")
-    return JSONResponse(status_code=200, content={"status": "Container Lock Service Active"})
+    """Basic health check endpoint"""
+    return {"status": "healthy", "service": "container-lock"}
+
+@app.get("/docker/health")
+async def docker_health():
+    """Docker connection health check"""
+    try:
+        connection_status = test_docker_connection()
+        return connection_status
+    except Exception as e:
+        logger.error(f"Docker health check failed: {str(e)}")
+        return {"status": "failed", "error": str(e)}
 
 @app.get("/", response_class=HTMLResponse)
 async def ui(request: Request):
@@ -144,7 +155,6 @@ async def ui(request: Request):
         containers = list_all_containers_with_locks()
         active_containers = [c for c in containers if c['status'] == 'running' and c['locked_by_ip']]
         available_containers = [c for c in containers if not c['locked_by_ip'] or c['status'] != 'running']
-        available_containers = list_all_containers()
         return templates.TemplateResponse(
             "container_sessions.html",
             {
