@@ -177,9 +177,13 @@
             
             async checkStatus() {
                 try {
-                    const response = await fetch(`/container/${this.containerId}/status`);
+                    // Use the global containers status endpoint to get user context
+                    const response = await fetch(`/containers/status`);
                     if (response.ok) {
-                        return await response.json();
+                        const data = await response.json();
+                        // Find this container in the response
+                        const containers = data.containers || [];
+                        return containers.find(c => c.id === this.containerId);
                     }
                 } catch (error) {
                     console.error(`Error checking status for ${this.containerId}:`, error);
@@ -209,7 +213,6 @@
                     // This is the user's current active container
                     button.disabled = false;
                     button.className = 'container-button btn-available w-full px-4 py-2 text-white rounded flex items-center justify-center space-x-2 ring-2 ring-green-300';
-                    iconElement.className = 'status-icon w-4 h-4';
                     iconElement.setAttribute('data-lucide', 'external-link');
                     textElement.textContent = 'Go to Active';
                     statusElement.innerHTML = `<span class="status-badge running">🟢 Your Active Container</span>`;
@@ -218,7 +221,6 @@
                     // User has another active container, this one is blocked
                     button.disabled = true;
                     button.className = 'container-button btn-blocked w-full px-4 py-2 bg-orange-500 text-white rounded cursor-not-allowed opacity-75 flex items-center justify-center space-x-2';
-                    iconElement.className = 'status-icon w-4 h-4';
                     iconElement.setAttribute('data-lucide', 'ban');
                     textElement.textContent = 'Blocked';
                     statusElement.innerHTML = `<span class="status-badge blocked">⚠️ ${status.blocked_reason}</span>`;
@@ -227,7 +229,6 @@
                     // Container is available and clickable
                     button.disabled = false;
                     button.className = 'container-button btn-available w-full px-4 py-2 text-white rounded flex items-center justify-center space-x-2';
-                    <!-- iconElement.className = 'status-icon w-4 h-4'; -->
                     iconElement.setAttribute('data-lucide', 'play-circle');
                     textElement.textContent = 'Connect';
                     statusElement.innerHTML = `<span class="status-badge running">● ${status.container_status}</span>`;
@@ -236,7 +237,6 @@
                     // Container is locked by another user
                     button.disabled = true;
                     button.className = 'container-button btn-locked w-full px-4 py-2 text-white rounded cursor-not-allowed opacity-75 flex items-center justify-center space-x-2';
-                    iconElement.className = 'status-icon w-4 h-4';
                     iconElement.setAttribute('data-lucide', 'lock');
                     textElement.textContent = 'In Use';
                     statusElement.innerHTML = `<span class="status-badge locked">🔒 Locked by ${status.locked_by_ip}</span>`;
@@ -245,7 +245,6 @@
                     // Container is exited
                     button.disabled = true;
                     button.className = 'container-button btn-stopped w-full px-4 py-2 text-white rounded cursor-not-allowed opacity-75 flex items-center justify-center space-x-2';
-                    iconElement.className = 'status-icon w-4 h-4';
                     iconElement.setAttribute('data-lucide', 'square');
                     textElement.textContent = 'Stopped';
                     statusElement.innerHTML = `<span class="status-badge exited">⏹ ${status.container_status}</span>`;
@@ -346,21 +345,24 @@
                     
                     // Set up release button
                     releaseActiveBtn.onclick = async () => {
-                        if (confirm('Are you sure you want to release your active container? This will end your session.')) {
+                        if (confirm('Are you sure you want to end your session? This will stop your active container.')) {
                             try {
-                                const releaseResponse = await fetch('/release', {
+                                const releaseResponse = await fetch('/end-session', {
                                     method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' }
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ stop_container: true })
                                 });
                                 if (releaseResponse.ok) {
+                                    const result = await releaseResponse.json();
+                                    alert(`Session ended successfully. Container ${result.container_stopped ? 'stopped' : 'released'}.`);
                                     // Refresh the page after successful release
                                     window.location.reload();
                                 } else {
-                                    alert('Failed to release container. Please try again.');
+                                    alert('Failed to end session. Please try again.');
                                 }
                             } catch (error) {
-                                console.error('Error releasing container:', error);
-                                alert('Error releasing container. Please try again.');
+                                console.error('Error ending session:', error);
+                                alert('Error ending session. Please try again.');
                             }
                         }
                     };

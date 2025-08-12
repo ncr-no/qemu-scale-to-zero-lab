@@ -278,21 +278,26 @@
                 if (!this.hasAcquiredLock) return;
                 
                 try {
-                    const response = await fetch('/release', {
+                    const response = await fetch('/end-session', {
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                        }
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ stop_container: true })
                     });
                     
                     if (response.ok) {
+                        const result = await response.json();
                         this.hasAcquiredLock = false;
-                        console.log('Successfully released container lock');
+                        console.log('Successfully ended session:', result);
+                        this.showNotification(`Session ended. Container ${result.container_stopped ? 'stopped' : 'released'}.`, 'success');
                     } else {
-                        console.error('Failed to release lock');
+                        console.error('Failed to end session');
+                        this.showNotification('Failed to end session', 'error');
                     }
                 } catch (error) {
-                    console.error('Error releasing lock:', error);
+                    console.error('Error ending session:', error);
+                    this.showNotification('Error ending session', 'error');
                 }
             }
             
@@ -351,22 +356,29 @@
                 this.updateStatus('warning', 'Verifying configuration...');
                 
                 try {
-                    // Check if the container URL is accessible
-                    const response = await fetch(this.containerUrl, { 
-                        method: 'HEAD',
-                        mode: 'no-cors' 
+                    // Check the verify-caddy-config endpoint which now validates lock ownership
+                    const response = await fetch('/verify-caddy-config', {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
                     });
                     
-                    // Since we're using no-cors, we can't check the actual response
-                    // but we can verify the URL is properly formed
-                    const url = new URL(this.containerUrl);
-                    if (url.pathname.includes(this.containerName)) {
+                    if (response.ok) {
+                        const data = await response.json();
                         this.updateStatus('active', 'Configuration verified');
                         
-                        // Show success message
-                        this.showNotification('Configuration verified successfully', 'success');
+                        // Show detailed verification message
+                        const userContainer = data.user_container;
+                        this.showNotification(
+                            `Configuration verified! Your container: ${userContainer.container_name} (Status: ${userContainer.status})`, 
+                            'success'
+                        );
+                    } else if (response.status === 403) {
+                        this.updateStatus('error', 'No active container found');
+                        this.showNotification('You must have an active container to verify configuration', 'error');
                     } else {
-                        this.updateStatus('error', 'Configuration mismatch');
+                        this.updateStatus('error', 'Configuration verification failed');
                         this.showNotification('Configuration verification failed', 'error');
                     }
                 } catch (error) {

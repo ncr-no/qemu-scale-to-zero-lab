@@ -1,10 +1,13 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Form
 from fastapi.responses import JSONResponse, HTMLResponse
 from container_lock.lock import (
     acquire_lock, list_all_containers, release_lock, get_locked_container, 
     get_active_containers, list_all_containers_with_locks, cleanup_exited_containers, 
-    get_container_lock_status, get_user_active_container, test_docker_connection
+    get_container_lock_status, get_user_active_container, test_docker_connection,
+    stop_container
 )
+from container_lock.utils import get_client_ip
+from container_lock.middleware import create_ip_lock_middleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import logging
@@ -47,18 +50,21 @@ async def periodic_cleanup():
 app = FastAPI(title="Container Lock Service", version="0.1.0", lifespan=lifespan)
 logger = logging.getLogger(__name__)
 
+# Add IP lock middleware for session endpoints
+app.middleware("http")(create_ip_lock_middleware(lock_timeout=30))
+
 # Setup Jinja2 templates and static files
 templates = Jinja2Templates(directory=os.path.abspath(os.path.join(os.path.dirname(__file__), './templates')))
 app.mount("/static", StaticFiles(directory=os.path.abspath(os.path.join(os.path.dirname(__file__), './static'))), name="static")
 
 @app.post("/acquire")
-async def acquire_container_lock(request: Request, container_id: str):
+async def acquire_container_lock(request: Request, container_id: str = Form(...)):
     """
     Acquire exclusive container lock for an IP address
     Only one container per IP is allowed
     """
-    ip = request.headers.get("X-Real-IP")
-    if not ip:
+    ip = get_client_ip(request)
+    if ip == "unknown":
         logger.warning("[ACQUIRE] Failed: No IP provided")
         raise HTTPException(status_code=400, detail="IP address required")
     
@@ -92,10 +98,15 @@ async def acquire_container_lock(request: Request, container_id: str):
         raise HTTPException(status_code=500, detail="Lock service unavailable")
 
 @app.post("/release")
-async def release_container_lock(ip: str):
+async def release_container_lock(request: Request):
     """
     Release container lock for an IP address
     """
+    ip = get_client_ip(request)
+    if ip == "unknown":
+        logger.warning("[RELEASE] Failed: No IP provided")
+        raise HTTPException(status_code=400, detail="IP address required")
+        
     logger.info(f"[RELEASE] Request: ip={ip}")
     if not release_lock(ip):
         logger.warning(f"[RELEASE] Failed: ip={ip}")
@@ -103,16 +114,47 @@ async def release_container_lock(ip: str):
     logger.info(f"[RELEASE] Success: ip={ip}")
     return JSONResponse(status_code=200, content={"status": "unlocked"})
 
+@app.post("/end-session")
+async def end_session(request: Request, stop_container: bool = True):
+    """
+    End session by releasing container lock and optionally stopping the container
+    """
+    ip = get_client_ip(request)
+    if ip == "unknown":
+        logger.warning("[END_SESSION] Failed: No IP provided")
+        raise HTTPException(status_code=400, detail="IP address required")
+    
+    # Verify user has an active container
+    user_active_container = get_user_active_container(ip)
+    if not user_active_container:
+        logger.warning(f"[END_SESSION] Failed: IP {ip} has no active container")
+        raise HTTPException(status_code=400, detail="No active session found for this IP")
+        
+    logger.info(f"[END_SESSION] Request: ip={ip}, container_id={user_active_container['container_id']}, stop_container={stop_container}")
+    
+    # Release lock with optional container stopping
+    if not release_lock(ip, stop_container_flag=stop_container):
+        logger.warning(f"[END_SESSION] Failed: ip={ip}")
+        raise HTTPException(status_code=400, detail="Failed to end session")
+    
+    logger.info(f"[END_SESSION] Success: ip={ip}, container stopped: {stop_container}")
+    return JSONResponse(status_code=200, content={
+        "status": "session_ended",
+        "container_stopped": stop_container,
+        "container_id": user_active_container['container_id']
+    })
+
 @app.get("/check")
 async def check_container_lock(request: Request):
     """
     Check if an IP has an active container lock
     """
-    logger.info(f"[CHECK] Request: header={request.headers.get('X-Real-IP')}")
-    ip = request.headers.get("X-Real-IP")
-    if not ip:
+    ip = get_client_ip(request)
+    if ip == "unknown":
         logger.warning(f"[CHECK] Failed: No IP provided")
         raise HTTPException(status_code=400, detail="IP address required")
+        
+    logger.info(f"[CHECK] Request: ip={ip}")
     container_id = get_locked_container(ip)
     if not container_id:
         logger.info(f"[CHECK] Available: ip={ip}")
@@ -198,8 +240,8 @@ async def get_my_active_container(request: Request):
     """
     Get the currently active container for the requesting IP
     """
-    ip = request.headers.get("X-Real-IP")
-    if not ip:
+    ip = get_client_ip(request)
+    if ip == "unknown":
         logger.warning("[MY_ACTIVE] Failed: No IP provided")
         raise HTTPException(status_code=400, detail="IP address required")
     
@@ -219,7 +261,7 @@ async def get_all_container_status(request: Request):
     Get status for all managed containers with lock information
     Also returns current user's active container if any
     """
-    ip = request.headers.get("X-Real-IP")
+    ip = get_client_ip(request)
     logger.info(f"[STATUS_ALL] Request for all container statuses from IP: {ip}")
     
     # First cleanup exited containers
@@ -228,7 +270,7 @@ async def get_all_container_status(request: Request):
     
     # Get current user's active container
     user_active_container = None
-    if ip:
+    if ip != "unknown":
         user_active_container = get_user_active_container(ip)
     
     # Enhance with clickable status
@@ -243,8 +285,19 @@ async def get_all_container_status(request: Request):
         else:
             enhanced_container['is_my_active'] = False
             
-        # If user has an active container, all other containers should not be clickable
-        if user_active_container and container['id'] != user_active_container['container_id']:
+        # Apply clickability rules:
+        # 1. If this is the user's own active container, it should always be clickable
+        if user_active_container and container['id'] == user_active_container['container_id']:
+            enhanced_container['is_clickable'] = True
+            # Remove any blocked reason for user's own container
+            if 'blocked_reason' in enhanced_container:
+                del enhanced_container['blocked_reason']
+        # 2. If container is locked by another IP, it's not clickable
+        elif enhanced_container.get('is_locked') and enhanced_container.get('locked_by_ip') != ip:
+            enhanced_container['is_clickable'] = False
+            enhanced_container['blocked_reason'] = f"Container locked by another user ({enhanced_container.get('locked_by_ip')})"
+        # 3. If user has an active container, all other containers should not be clickable
+        elif user_active_container and container['id'] != user_active_container['container_id']:
             enhanced_container['is_clickable'] = False
             enhanced_container['blocked_reason'] = "You already have an active container"
             
@@ -298,10 +351,22 @@ async def container_session(request: Request, container_name: str):
         )
 
 @app.get("/verify-caddy-config")
-async def verify_caddy_config():
+async def verify_caddy_config(request: Request):
     """
     Verify Caddy server configuration for container URLs
+    Requires user to have an active container lock
     """
+    ip = get_client_ip(request)
+    if ip == "unknown":
+        logger.warning("[VERIFY_CONFIG] Failed: No IP provided")
+        raise HTTPException(status_code=400, detail="IP address required")
+    
+    # Check if user has an active container
+    user_active_container = get_user_active_container(ip)
+    if not user_active_container:
+        logger.warning(f"[VERIFY_CONFIG] Failed: IP {ip} has no active container")
+        raise HTTPException(status_code=403, detail="No active container found. Please acquire a container lock first.")
+    
     try:
         # This would typically check the Caddy admin API or configuration
         # For now, we'll return basic configuration info
@@ -311,18 +376,24 @@ async def verify_caddy_config():
             "caddy_status": "active",
             "container_routes": [],
             "sablier_enabled": True,
-            "session_duration": "10m"
+            "session_duration": "10m",
+            "user_container": {
+                "container_id": user_active_container["container_id"],
+                "container_name": user_active_container["container_name"],
+                "status": user_active_container["container_status"]
+            }
         }
         
         for container in containers:
             config_info["container_routes"].append({
                 "container_name": container['name'],
-                "route_path": f"/{container['name']}/*",
+                "route_path": f"/vm/{container['name']}/*",
                 "proxy_target": f"{container['name']}:8006",
-                "sablier_managed": True
+                "sablier_managed": True,
+                "is_user_container": container['id'] == user_active_container["container_id"]
             })
         
-        logger.info("[VERIFY_CONFIG] Caddy configuration verified")
+        logger.info(f"[VERIFY_CONFIG] Caddy configuration verified for IP {ip}")
         return JSONResponse(status_code=200, content=config_info)
         
     except Exception as e:

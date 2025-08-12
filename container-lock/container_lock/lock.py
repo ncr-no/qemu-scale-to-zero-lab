@@ -168,10 +168,39 @@ def acquire_lock(ip: str, container_id: str, redis_client=None) -> bool:
         logger.error(f"Redis error during lock acquisition: {str(e)}")
         raise HTTPException(status_code=500, detail="Lock service unavailable")
 
-def release_lock(ip: str, redis_client=None) -> bool:
+def stop_container(container_id: str) -> bool:
+    """
+    Stop a container by ID
+    Returns True if container was stopped successfully
+    """
+    try:
+        client = get_docker_client()
+        container = client.containers.get(container_id)
+        
+        if container.status == 'running':
+            container.stop(timeout=10)
+            logger.info(f"Container {container_id} stopped successfully")
+            return True
+        else:
+            logger.info(f"Container {container_id} is not running (status: {container.status})")
+            return True
+            
+    except docker.errors.NotFound:
+        logger.warning(f"Container {container_id} not found")
+        return False
+    except Exception as e:
+        logger.error(f"Error stopping container {container_id}: {str(e)}")
+        return False
+
+def release_lock(ip: str, redis_client=None, stop_container_flag: bool = False) -> bool:
     """
     Release container lock for a given IP address
     Returns True if lock existed and was successfully removed
+    
+    Args:
+        ip: IP address to release lock for
+        redis_client: Redis client instance
+        stop_container_flag: Whether to stop the container after releasing lock
     """
     redis_client = redis_client or get_redis_client()
     try:
@@ -181,9 +210,16 @@ def release_lock(ip: str, redis_client=None) -> bool:
         container_id_str = container_id.decode() if isinstance(container_id, bytes) else container_id
         if not is_managed_container(container_id_str):
             raise HTTPException(status_code=403, detail="Container not managed by lock service")
+        
+        # Stop container if requested
+        if stop_container_flag:
+            stop_success = stop_container(container_id_str)
+            if not stop_success:
+                logger.warning(f"Failed to stop container {container_id_str}, but will continue with lock release")
+        
         redis_client.delete(f"lock:{ip}")
         redis_client.srem("active_containers", container_id_str)
-        logger.info(f"Released container {container_id_str} for IP {ip}")
+        logger.info(f"Released container {container_id_str} for IP {ip}{' and stopped container' if stop_container_flag else ''}")
         return True
     except HTTPException:
         # Surface application errors to tests
@@ -346,10 +382,13 @@ def cleanup_exited_containers(redis_client=None) -> int:
                         container_found = True
                         # If container is exited, remove the lock
                         if container.status == 'exited':
-                            redis_client.delete(key_str)
-                            redis_client.srem("active_containers", locked_container_id)
-                            logger.info(f"Cleaned up lock for exited container {locked_container_id} (IP: {ip})")
-                            cleaned_count += 1
+                            # For now, don't automatically cleanup exited containers
+                            # This allows users to maintain session state and manually end sessions
+                            # redis_client.delete(key_str)
+                            # redis_client.srem("active_containers", locked_container_id)
+                            # logger.info(f"Cleaned up lock for exited container {locked_container_id} (IP: {ip})")
+                            # cleaned_count += 1
+                            pass
                         break
                 
                 # If container no longer exists, remove the lock
@@ -419,4 +458,4 @@ def get_container_lock_status(container_id: str, redis_client=None) -> dict:
             "is_locked": False,
             "locked_by_ip": None,
             "is_clickable": False
-        }
+        } 
