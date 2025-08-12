@@ -1,12 +1,10 @@
-version: '3.8'
-
 services:
   caddy:
     build:
       context: ..
       dockerfile: Dockerfile
-      args:
-        CADDY_VERSION: "2.9.1"
+    args:
+      CADDY_VERSION: "2.9.1"
     ports:
       - "80:80"
     volumes:
@@ -18,9 +16,9 @@ services:
       - redis
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    interval: 10s
+    timeout: 5s
+    retries: 5
     networks:
       - qemu-network
 
@@ -63,7 +61,11 @@ services:
     expose:
       - "8006"
     volumes:
+      {% if boot_image == 'kali' %}
+      - {{ container_prefix }}_{{ i }}:/storage:rw
+      {% else %}
       - {% if volume_prefix == '.' %}.{% else %}{{ volume_prefix }}{% endif %}/{{ container_prefix }}_{{ i }}:/storage:rw
+      {% endif %}
     restart: unless-stopped
     labels:
       - sablier.enable=true
@@ -89,12 +91,22 @@ services:
       dockerfile: Dockerfile
     environment:
       REDIS_URL: "redis://redis:6379/0"
+{% if docker_host %}
+      DOCKER_HOST: "{{ docker_host }}"
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: "/certs/client"
+    volumes:
+      - {{ docker_ca }}:/certs/client/ca.pem:ro
+      - {{ docker_cert }}:/certs/client/cert.pem:ro
+      - {{ docker_key }}:/certs/client/key.pem:ro
+{% else %}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+{% endif %}
     ports:
       - "8000:8000"
     depends_on:
       - redis
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - qemu-network
 
@@ -105,4 +117,14 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
-  caddy_logs: 
+  caddy_logs:
+{% if boot_image == 'kali' %}
+{% for i in range(1, n + 1) %}
+  {{ container_prefix }}_{{ i }}:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=50g
+{% endfor %}
+{% endif %} 
