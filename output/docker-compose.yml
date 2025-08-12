@@ -5,8 +5,8 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-      args:
-        CADDY_VERSION: "2.9.1"
+    args:
+      CADDY_VERSION: "2.9.1"
     ports:
       - "80:80"
     volumes:
@@ -18,9 +18,9 @@ services:
       - redis
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    interval: 10s
+    timeout: 5s
+    retries: 5
     networks:
       - qemu-network
 
@@ -63,7 +63,9 @@ services:
     expose:
       - "8006"
     volumes:
-      - ./kali_1:/storage:rw
+      
+      - kali_1:/storage:rw
+      
     restart: unless-stopped
     labels:
       - sablier.enable=true
@@ -92,7 +94,9 @@ services:
     expose:
       - "8006"
     volumes:
-      - ./kali_2:/storage:rw
+      
+      - kali_2:/storage:rw
+      
     restart: unless-stopped
     labels:
       - sablier.enable=true
@@ -121,7 +125,9 @@ services:
     expose:
       - "8006"
     volumes:
-      - ./kali_3:/storage:rw
+      
+      - kali_3:/storage:rw
+      
     restart: unless-stopped
     labels:
       - sablier.enable=true
@@ -147,12 +153,19 @@ services:
       dockerfile: Dockerfile
     environment:
       REDIS_URL: "redis://redis:6379/0"
+
+      DOCKER_HOST: "tcp://localhost:2376"
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: "/certs/client"
+    volumes:
+      - /etc/certs/ca.pem:/certs/client/ca.pem:ro
+      - /etc/certs/cert.pem:/certs/client/cert.pem:ro
+      - /etc/certs/key.pem:/certs/client/key.pem:ro
+
     ports:
       - "8000:8000"
     depends_on:
       - redis
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - qemu-network
 
@@ -163,4 +176,28 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
-  caddy_logs: 
+  caddy_logs:
+
+
+  kali_1:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=50g
+
+  kali_2:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=50g
+
+  kali_3:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=50g
+
+ 
