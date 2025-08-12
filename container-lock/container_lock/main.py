@@ -275,7 +275,7 @@ async def container_session(request: Request, container_name: str):
             raise HTTPException(status_code=404, detail="Container not found")
         
         # Construct the container URL (based on Caddy configuration)
-        container_url = f"/{container_name}/"
+        container_url = f"/vm/{container_name}/"
         
         logger.info(f"[SESSION] Serving session page for container: {container_name}")
         return templates.TemplateResponse(
