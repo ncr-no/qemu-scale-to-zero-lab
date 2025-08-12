@@ -27,6 +27,7 @@
     handle_path / {
         reverse_proxy container-lock:8000 {
             header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
         }
     }
 

@@ -27,6 +27,7 @@
     handle_path / {
         reverse_proxy container-lock:8000 {
             header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
         }
     }
 
@@ -90,7 +91,7 @@
             }
         }
         reverse_proxy kali_3:8006 {
-            header_up Host kali_1:8006
+            header_up Host kali_3:8006
             header_up X-Real-IP {remote}
             header_up X-Forwarded-For {remote}
             header_up X-Forwarded-Proto {scheme}
@@ -107,6 +108,7 @@
     handle @not_handled {
         reverse_proxy container-lock:8000 {
             header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
         }
     }
 }
